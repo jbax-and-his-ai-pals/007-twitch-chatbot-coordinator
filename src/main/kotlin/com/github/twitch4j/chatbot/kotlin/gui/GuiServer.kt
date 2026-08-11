@@ -6,6 +6,7 @@ import com.github.twitch4j.chatbot.kotlin.core.CooldownType
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.engine.ApplicationEngine
@@ -22,6 +23,7 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
+import io.ktor.util.pipeline.PipelineContext
 import io.ktor.websocket.Frame
 import io.ktor.websocket.send
 import kotlinx.coroutines.flow.collect
@@ -138,6 +140,95 @@ fun Application.guiModule(admin: AdminController) {
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 200
                 call.respond(admin.recentActivity(limit).map { it.toDto() })
             }
+
+            route("/bots/{botKey}") {
+                get("/config") {
+                    val botKey = call.parameters["botKey"]!!
+                    val config = admin.botConfig(botKey)
+                    if (config == null) call.respond(HttpStatusCode.NotFound) else call.respond(config.toDto())
+                }
+
+                post("/excluded-users") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<UserDto>()
+                    respondOk(admin.addExcludedUser(botKey, body.user))
+                }
+                delete("/excluded-users/{value}") {
+                    val botKey = call.parameters["botKey"]!!
+                    respondOk(admin.removeExcludedUser(botKey, call.parameters["value"]!!))
+                }
+
+                post("/callout-words") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<WordDto>()
+                    respondOk(admin.addCalloutWord(botKey, body.word))
+                }
+                delete("/callout-words/{value}") {
+                    val botKey = call.parameters["botKey"]!!
+                    respondOk(admin.removeCalloutWord(botKey, call.parameters["value"]!!))
+                }
+
+                post("/forbidden-words") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<WordDto>()
+                    respondOk(admin.addForbiddenWord(botKey, body.word))
+                }
+                delete("/forbidden-words/{value}") {
+                    val botKey = call.parameters["botKey"]!!
+                    respondOk(admin.removeForbiddenWord(botKey, call.parameters["value"]!!))
+                }
+
+                post("/callout-overrides") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<CalloutOverrideDto>()
+                    respondOk(admin.setCalloutResponseOverride(botKey, body.word, body.response))
+                }
+                delete("/callout-overrides/{value}") {
+                    val botKey = call.parameters["botKey"]!!
+                    respondOk(admin.removeCalloutResponseOverride(botKey, call.parameters["value"]!!))
+                }
+
+                post("/message-length") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<MessageLengthDto>()
+                    respondOk(admin.setMessageLength(botKey, body.minimum, body.maximum))
+                }
+
+                post("/similarity-threshold") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<SimilarityThresholdDto>()
+                    respondOk(admin.setSimilarityThreshold(botKey, body.threshold))
+                }
+
+                post("/active-mood") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<ActiveMoodDto>()
+                    respondOk(admin.setActiveMood(botKey, body.mood))
+                }
+
+                post("/minimum-messages-between") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<MinimumMessagesBetweenDto>()
+                    respondOk(admin.setMinimumMessagesBetween(botKey, body.count))
+                }
+
+                post("/cooldown-duration/{type}") {
+                    val botKey = call.parameters["botKey"]!!
+                    val type = parseCooldownType(call.parameters["type"])
+                    if (type == null) {
+                        call.respond(HttpStatusCode.BadRequest)
+                        return@post
+                    }
+                    val body = call.receive<CooldownDurationDto>()
+                    respondOk(admin.setCooldownDuration(botKey, type, body.ms))
+                }
+
+                post("/mainline-interval") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<MainlineIntervalDto>()
+                    respondOk(admin.setMainlineIntervalBounds(botKey, body.minMs, body.maxMs))
+                }
+            }
         }
 
         webSocket("/ws/activity") {
@@ -151,3 +242,7 @@ fun Application.guiModule(admin: AdminController) {
 
 private fun parseCooldownType(raw: String?): CooldownType? =
     raw?.let { runCatching { CooldownType.valueOf(it.uppercase()) }.getOrNull() }
+
+private suspend fun PipelineContext<Unit, ApplicationCall>.respondOk(success: Boolean) {
+    call.respond(if (success) HttpStatusCode.OK else HttpStatusCode.NotFound)
+}

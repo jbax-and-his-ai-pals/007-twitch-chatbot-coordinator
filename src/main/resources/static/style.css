@@ -305,6 +305,128 @@ body {
 .recent-time { color: var(--text-dim); margin-right: 6px; font-size: 10px; }
 .recent-empty { color: var(--text-dim); font-size: 11px; font-style: italic; }
 
+.config-toggle {
+  width: 100%;
+  margin-top: 12px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+.config-toggle:hover { color: var(--text); border-color: var(--accent); }
+
+.config-panel {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.config-block { margin-bottom: 14px; }
+.config-block h4 {
+  margin: 0 0 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.config-readonly { font-size: 12px; color: var(--text); }
+.config-readonly div { margin-bottom: 4px; }
+.config-readonly ul { margin: 2px 0 4px; padding-left: 18px; }
+.config-readonly b { color: var(--text-dim); font-weight: 600; }
+.config-empty { color: var(--text-dim); font-size: 11px; font-style: italic; }
+
+.config-mood-select {
+  width: 100%;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2px 4px 2px 10px;
+  font-size: 11px;
+  color: var(--text);
+}
+.chip button {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+.chip button:hover { color: var(--red); }
+
+.config-add-form { display: flex; gap: 6px; }
+.config-add-form input {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.config-add-form button, .config-numfields button {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.config-add-form button:hover, .config-numfields button:hover { border-color: var(--accent); color: var(--accent); }
+
+.config-numfields { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
+.config-numfields label { display: flex; align-items: center; gap: 4px; }
+.config-numfields input.cfg-num {
+  width: 84px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.override-list-cfg { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.override-row-cfg {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--panel-alt);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+.override-row-cfg button {
+  background: none;
+  border: none;
+  color: var(--red);
+  cursor: pointer;
+  font-size: 13px;
+}
+
 .overrides-card h3 { margin: 0 0 4px; font-size: 13px; }
 .hint { font-size: 11px; color: var(--text-dim); margin: 0 0 8px; }
 .override-form { display: flex; gap: 6px; margin-bottom: 8px; }

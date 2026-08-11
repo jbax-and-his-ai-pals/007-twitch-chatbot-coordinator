@@ -26,7 +26,8 @@ data class MainlineCooldownConfig(
     val startInstantly: Boolean = false,
     val intervalMinimumMs: Long = 300000L,
     val intervalMaximumMs: Long = 450000L,
-    val minimumMessagesBetween: Int = 20,
+    /** Live-editable via the GUI config panel - read fresh from [BotDefinition.cooldowns] on every dispatch. */
+    var minimumMessagesBetween: Int = 20,
 )
 
 /** Base cooldown tuning every bot falls back to unless it overrides a field. */

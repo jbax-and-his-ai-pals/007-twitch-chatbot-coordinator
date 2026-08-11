@@ -135,6 +135,10 @@ class ConfiguredPersonality(
 
     override fun adminCooldown(type: CooldownType, action: CooldownAdminAction) = cooldowns.admin(type, action)
 
+    override fun setCooldownConfig(type: CooldownType, ms: Long) = cooldowns.setIntervalMs(type, ms)
+
+    override fun setMainlineIntervalBounds(minMs: Long, maxMs: Long) = cooldowns.setMainlineIntervalBounds(minMs, maxMs)
+
     private fun send(targetChannel: String, message: String, manual: Boolean = false) {
         client.chat.sendMessage(targetChannel, message)
         activityBus.publish(ActivityEvent.Outgoing(botKey = bot.key, channel = targetChannel, message = message, manual = manual))

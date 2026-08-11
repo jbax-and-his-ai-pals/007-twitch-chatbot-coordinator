@@ -4,10 +4,15 @@ import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
+import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
+import com.github.twitch4j.chatbot.kotlin.core.FeatureConfig
+import com.github.twitch4j.chatbot.kotlin.core.HelloTrigger
 import com.github.twitch4j.chatbot.kotlin.core.MessageDispatcher
+import com.github.twitch4j.chatbot.kotlin.core.MessageLengthConfig
+import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.Personality
@@ -26,11 +31,48 @@ data class BotStatus(
 )
 
 /**
+ * Everything about a bot's live, resolved config the GUI's config panel can show or edit.
+ * `api`/`credentials` (secrets) are deliberately never included here. [helloTriggers] and
+ * [features] are rendered as plain-text descriptions rather than structured data, since
+ * they're read-only in the panel (see [AdminController] class doc for what's editable).
+ */
+data class BotConfigDetail(
+    val key: String,
+    val accountUsername: String,
+    val triggerKeywords: List<String>,
+    val channel: String,
+    val excludedUsers: List<String>,
+    val calloutWords: List<String>,
+    val forbiddenWords: List<String>,
+    val calloutResponseOverrides: Map<String, String>,
+    val messageLengthMinimum: Int,
+    val messageLengthMaximum: Int,
+    val similarityThreshold: Int,
+    val moods: List<String>,
+    val activeMood: String,
+    val minimumMessagesBetween: Int,
+    val helloTriggers: List<String>,
+    val transformWords: List<String>,
+    val selfQuoteMarker: String,
+    val features: List<String>,
+)
+
+/**
  * Pure, network-free facade over a running [Controller]'s bots - everything the GUI needs
  * to read or drive, built from already-constructed [Personality]/[ITwitchClient]
  * instances. Unlike [Controller] itself (whose construction connects to real Twitch via
  * `TwitchClientBuilder.build()`), this class touches no network I/O, so it's fully
  * unit-testable with the same MockK pattern `ConfiguredPersonalityTest` already uses.
+ *
+ * Config mutations (excluded users, callout/forbidden words, callout response overrides,
+ * message length, similarity threshold, active mood, cooldown durations, minimum messages
+ * between) all edit the live [com.github.twitch4j.chatbot.kotlin.core.BotDefinition]/
+ * [com.github.twitch4j.chatbot.kotlin.core.Cooldowns] a bot is already running with -
+ * `ProcessedEvent`/`ConfiguredPersonality` read those fields fresh on every dispatch, so
+ * changes apply to the very next message. They're session-only: nothing is written back to
+ * `config.yaml`, so a restart reverts to the file (re-serializing YAML would strip its
+ * comments/formatting, which felt like the wrong trade for a "tune while testing" tool).
+ * `api`/`credentials` are never exposed or mutable through this class - they're secrets.
  */
 class AdminController(
     private val personalities: List<Personality>,
@@ -118,5 +160,165 @@ class AdminController(
         every { event.user } returns EventUser("simulated", user)
         every { event.channel } returns EventChannel("simulated", channel)
         return event
+    }
+
+    // ---- Config: read ----------------------------------------------------------------
+
+    fun botConfig(botKey: String): BotConfigDetail? {
+        val personality = personalityByKey[botKey] ?: return null
+        val bot = personality.definition
+        return BotConfigDetail(
+            key = bot.key,
+            accountUsername = bot.accountUsername,
+            triggerKeywords = bot.triggerKeywords,
+            channel = personality.channel,
+            excludedUsers = bot.excludedUsers.sorted(),
+            calloutWords = bot.calloutWords,
+            forbiddenWords = bot.forbiddenWords,
+            calloutResponseOverrides = bot.calloutResponseOverrides,
+            messageLengthMinimum = bot.messageLength.minimum,
+            messageLengthMaximum = bot.messageLength.maximum,
+            similarityThreshold = bot.similarityThreshold,
+            moods = bot.moods.map { it.name },
+            activeMood = bot.activeMood.name,
+            minimumMessagesBetween = bot.cooldowns.mainline.minimumMessagesBetween,
+            helloTriggers = bot.helloTriggers.map(::describeHelloTrigger),
+            transformWords = bot.transform.words,
+            selfQuoteMarker = bot.transform.selfQuoteMarker,
+            features = bot.features.map(::describeFeature),
+        )
+    }
+
+    private fun describeHelloTrigger(trigger: HelloTrigger): String {
+        val parts = buildList {
+            trigger.startsWith?.let { add("starts with \"$it\"") }
+            trigger.contains?.let { add("contains \"$it\"") }
+            trigger.alsoContains?.let { add("also contains \"$it\"") }
+        }
+        return parts.joinToString(" and ")
+    }
+
+    private fun describeFeature(feature: FeatureConfig): String = when (feature) {
+        is FeatureConfig.EasterEgg -> buildString {
+            append("easter egg")
+            if (feature.whenHello) append(" on hello")
+            feature.alsoContains?.let { append(" containing \"$it\"") }
+            append(" -> \"${feature.response}\"")
+        }
+
+        is FeatureConfig.Retry -> "retry trigger prefix \"${feature.triggerPrefix}\""
+    }
+
+    // ---- Config: write (session-only, see class doc) ----------------------------------
+
+    fun addExcludedUser(botKey: String, user: String): Boolean = editBot(botKey) { bot ->
+        val normalized = user.trim().lowercase()
+        if (normalized.isEmpty()) return@editBot false
+        bot.excludedUsers = bot.excludedUsers + normalized
+        logConfigChange(botKey, "excluded user added: $normalized")
+        true
+    }
+
+    fun removeExcludedUser(botKey: String, user: String): Boolean = editBot(botKey) { bot ->
+        bot.excludedUsers = bot.excludedUsers - user.trim().lowercase()
+        logConfigChange(botKey, "excluded user removed: $user")
+        true
+    }
+
+    fun addCalloutWord(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
+        val normalized = word.trim().lowercase()
+        if (normalized.isEmpty() || bot.calloutWords.contains(normalized)) return@editBot false
+        bot.calloutWords = bot.calloutWords + normalized
+        logConfigChange(botKey, "callout word added: $normalized")
+        true
+    }
+
+    fun removeCalloutWord(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
+        bot.calloutWords = bot.calloutWords - word.trim().lowercase()
+        logConfigChange(botKey, "callout word removed: $word")
+        true
+    }
+
+    fun addForbiddenWord(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
+        val normalized = word.trim().lowercase()
+        if (normalized.isEmpty() || bot.forbiddenWords.contains(normalized)) return@editBot false
+        bot.forbiddenWords = bot.forbiddenWords + normalized
+        logConfigChange(botKey, "forbidden word added: $normalized")
+        true
+    }
+
+    fun removeForbiddenWord(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
+        bot.forbiddenWords = bot.forbiddenWords - word.trim().lowercase()
+        logConfigChange(botKey, "forbidden word removed: $word")
+        true
+    }
+
+    fun setCalloutResponseOverride(botKey: String, word: String, response: String): Boolean = editBot(botKey) { bot ->
+        val normalized = word.trim().lowercase()
+        if (normalized.isEmpty()) return@editBot false
+        bot.calloutResponseOverrides = bot.calloutResponseOverrides + (normalized to response)
+        logConfigChange(botKey, "callout response override set: \"$normalized\" -> \"$response\"")
+        true
+    }
+
+    fun removeCalloutResponseOverride(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
+        bot.calloutResponseOverrides = bot.calloutResponseOverrides - word.trim().lowercase()
+        logConfigChange(botKey, "callout response override removed: $word")
+        true
+    }
+
+    fun setMessageLength(botKey: String, minimum: Int, maximum: Int): Boolean = editBot(botKey) { bot ->
+        if (minimum < 0 || maximum < minimum) return@editBot false
+        bot.messageLength = MessageLengthConfig(minimum = minimum, maximum = maximum)
+        logConfigChange(botKey, "message length set: $minimum-$maximum")
+        true
+    }
+
+    fun setSimilarityThreshold(botKey: String, threshold: Int): Boolean = editBot(botKey) { bot ->
+        if (threshold !in 0..100) return@editBot false
+        bot.similarityThreshold = threshold
+        logConfigChange(botKey, "similarity threshold set: $threshold")
+        true
+    }
+
+    fun setActiveMood(botKey: String, moodName: String): Boolean = editBot(botKey) { bot ->
+        val mood = bot.moods.firstOrNull { it.name == moodName } ?: return@editBot false
+        bot.activeMood = mood
+        logConfigChange(botKey, "active mood set: $moodName")
+        true
+    }
+
+    fun setMinimumMessagesBetween(botKey: String, count: Int): Boolean = editBot(botKey) { bot ->
+        if (count < 0) return@editBot false
+        bot.cooldowns.mainline.minimumMessagesBetween = count
+        logConfigChange(botKey, "minimum messages between set: $count")
+        true
+    }
+
+    /** [type] must not be MAINLINE - that's a random range, set via [setMainlineIntervalBounds]. */
+    fun setCooldownDuration(botKey: String, type: CooldownType, ms: Long): Boolean {
+        if (ms < 0 || type == CooldownType.MAINLINE) return false
+        val personality = personalityByKey[botKey] ?: return false
+        personality.setCooldownConfig(type, ms)
+        logConfigChange(botKey, "${type.name.lowercase()} cooldown duration set: ${ms}ms")
+        return true
+    }
+
+    fun setMainlineIntervalBounds(botKey: String, minMs: Long, maxMs: Long): Boolean {
+        if (minMs < 0 || maxMs < minMs) return false
+        val personality = personalityByKey[botKey] ?: return false
+        personality.setMainlineIntervalBounds(minMs, maxMs)
+        logConfigChange(botKey, "mainline interval bounds set: ${minMs}ms-${maxMs}ms")
+        return true
+    }
+
+    private fun editBot(botKey: String, block: (BotDefinition) -> Boolean): Boolean {
+        val bot = personalityByKey[botKey]?.definition ?: return false
+        return block(bot)
+    }
+
+    /** Routed through Messaging (not straight to activityBus) so config changes show up in the same debug-log stream as everything else. */
+    private fun logConfigChange(botKey: String, description: String) {
+        Messaging.info("[$botKey] CONFIG: $description")
     }
 }

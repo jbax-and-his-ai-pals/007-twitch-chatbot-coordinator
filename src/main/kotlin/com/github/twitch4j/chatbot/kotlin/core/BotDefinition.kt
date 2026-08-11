@@ -13,6 +13,13 @@ data class ResolvedCooldowns(
  * One bot's fully-resolved, ready-to-run config: [RawBotConfig] merged on top of
  * [DefaultsConfig]. This is what [com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality]
  * actually runs on - no more per-bot Kotlin subclasses.
+ *
+ * Several fields are `var` rather than `val` so the GUI's config panel can mutate a running
+ * bot's tuning in place - [com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent.eligibilityFor]
+ * and friends always read them fresh off this instance, never a cached copy, so changes take
+ * effect on the very next dispatched message. These edits are session-only (never written
+ * back to `config.yaml`), so a restart reverts to the file. `api`/`credentials` are
+ * deliberately excluded from anything GUI-facing - they're secrets, not tuning.
  */
 data class BotDefinition(
     val key: String,
@@ -21,17 +28,17 @@ data class BotDefinition(
     val ignoreOtherBots: Boolean,
     val api: Map<String, String>,
     val credentials: Map<String, String>,
-    val excludedUsers: Set<String>,
-    val calloutWords: List<String>,
-    val forbiddenWords: List<String>,
-    val calloutResponseOverrides: Map<String, String>,
-    val messageLength: MessageLengthConfig,
-    val similarityThreshold: Int,
+    var excludedUsers: Set<String>,
+    var calloutWords: List<String>,
+    var forbiddenWords: List<String>,
+    var calloutResponseOverrides: Map<String, String>,
+    var messageLength: MessageLengthConfig,
+    var similarityThreshold: Int,
     val cooldowns: ResolvedCooldowns,
     val helloTriggers: List<HelloTrigger>,
     val transform: TransformConfig,
     val moods: List<MoodConfig>,
-    val activeMood: MoodConfig,
+    var activeMood: MoodConfig,
     val prompts: PromptConfig,
     val features: List<FeatureConfig>,
 ) {

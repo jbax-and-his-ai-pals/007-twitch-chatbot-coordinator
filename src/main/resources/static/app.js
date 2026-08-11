@@ -167,6 +167,8 @@ function renderBotCard(bot) {
     </form>
     <div class="recent-header">Recent messages</div>
     <div class="recent-messages"><div class="recent-empty">no messages yet</div></div>
+    <button class="config-toggle" data-bot="${escapeHtml(bot.key)}">&#9881; Configure</button>
+    <div class="config-panel" style="display:none"></div>
   `;
 
   card.querySelector("form").addEventListener("submit", async (e) => {
@@ -178,8 +180,235 @@ function renderBotCard(bot) {
     input.value = "";
   });
 
+  card.querySelector(".config-toggle").addEventListener("click", async () => {
+    const panel = card.querySelector(".config-panel");
+    const opening = panel.style.display === "none";
+    panel.style.display = opening ? "block" : "none";
+    if (opening && !panel.dataset.loaded) await refreshConfigPanel(bot.key);
+  });
+
   return card;
 }
+
+// ---- Config panel: read-only display + editable lists/numbers/mood ----------------
+
+function configSectionHtml(botKey, config, cooldowns) {
+  return `
+    <div class="config-block">
+      <h4>Identity</h4>
+      <div class="config-readonly">
+        <div><b>Trigger keywords:</b> ${config.triggerKeywords.map(escapeHtml).join(", ")}</div>
+        <div><b>Transform words:</b> ${config.transformWords.map(escapeHtml).join(", ") || "(none)"}</div>
+        <div><b>Self-quote marker:</b> ${escapeHtml(config.selfQuoteMarker || "(none)")}</div>
+        ${config.helloTriggers.length ? `<div><b>Hello triggers:</b><ul>${config.helloTriggers.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul></div>` : ""}
+        ${config.features.length ? `<div><b>Features:</b><ul>${config.features.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul></div>` : ""}
+      </div>
+    </div>
+
+    <div class="config-block">
+      <h4>Active mood</h4>
+      <select class="config-mood-select" data-bot="${escapeHtml(botKey)}">
+        ${config.moods.map((m) => `<option value="${escapeHtml(m)}" ${m === config.activeMood ? "selected" : ""}>${escapeHtml(m)}</option>`).join("")}
+      </select>
+    </div>
+
+    ${chipListBlockHtml(botKey, "Excluded users", "excluded-users", "user", config.excludedUsers)}
+    ${chipListBlockHtml(botKey, "Callout words", "callout-words", "word", config.calloutWords)}
+    ${chipListBlockHtml(botKey, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
+    ${overrideListBlockHtml(botKey, config.calloutResponseOverrides)}
+
+    <div class="config-block">
+      <h4>Message length</h4>
+      <div class="config-numfields">
+        <label>min <input type="number" class="cfg-num" data-field="msg-min" value="${config.messageLengthMinimum}" /></label>
+        <label>max <input type="number" class="cfg-num" data-field="msg-max" value="${config.messageLengthMaximum}" /></label>
+        <button data-action="save-message-length" data-bot="${escapeHtml(botKey)}">Save</button>
+      </div>
+    </div>
+
+    <div class="config-block">
+      <h4>Similarity threshold</h4>
+      <div class="config-numfields">
+        <input type="number" class="cfg-num" data-field="similarity" value="${config.similarityThreshold}" />
+        <button data-action="save-similarity" data-bot="${escapeHtml(botKey)}">Save</button>
+      </div>
+    </div>
+
+    <div class="config-block">
+      <h4>Minimum messages between mainline actions</h4>
+      <div class="config-numfields">
+        <input type="number" class="cfg-num" data-field="min-messages" value="${config.minimumMessagesBetween}" />
+        <button data-action="save-min-messages" data-bot="${escapeHtml(botKey)}">Save</button>
+      </div>
+    </div>
+
+    <div class="config-block">
+      <h4>Cooldown durations (ms)</h4>
+      <div class="config-numfields cooldown-durations">
+        <label>wisdom <input type="number" class="cfg-num" data-field="cd-wisdom" value="${cooldowns.wisdom.configuredMs}" /></label>
+        <label>callout <input type="number" class="cfg-num" data-field="cd-callout" value="${cooldowns.callout.configuredMs}" /></label>
+        <label>retry <input type="number" class="cfg-num" data-field="cd-retry" value="${cooldowns.retry.configuredMs}" /></label>
+        <label>request <input type="number" class="cfg-num" data-field="cd-request" value="${cooldowns.request.configuredMs}" /></label>
+        <button data-action="save-cooldown-durations" data-bot="${escapeHtml(botKey)}">Save</button>
+      </div>
+    </div>
+
+    <div class="config-block">
+      <h4>Mainline interval bounds (ms)</h4>
+      <div class="config-numfields">
+        <label>min <input type="number" class="cfg-num" data-field="mainline-min" value="${cooldowns.mainlineIntervalMinimumMs}" /></label>
+        <label>max <input type="number" class="cfg-num" data-field="mainline-max" value="${cooldowns.mainlineIntervalMaximumMs}" /></label>
+        <button data-action="save-mainline-interval" data-bot="${escapeHtml(botKey)}">Save</button>
+      </div>
+    </div>
+  `;
+}
+
+function chipListBlockHtml(botKey, title, listKey, fieldName, items) {
+  const chips = items.map((item) => `
+    <span class="chip">${escapeHtml(item)}<button data-action="remove-chip" data-bot="${escapeHtml(botKey)}" data-list="${listKey}" data-value="${escapeHtml(item)}">&times;</button></span>
+  `).join("") || `<span class="config-empty">none</span>`;
+
+  return `
+    <div class="config-block">
+      <h4>${title}</h4>
+      <div class="chip-list">${chips}</div>
+      <div class="config-add-form">
+        <input type="text" class="chip-input" placeholder="add..." />
+        <button data-action="add-chip" data-bot="${escapeHtml(botKey)}" data-list="${listKey}" data-field="${fieldName}">Add</button>
+      </div>
+    </div>
+  `;
+}
+
+function overrideListBlockHtml(botKey, overrides) {
+  const rows = Object.entries(overrides).map(([word, response]) => `
+    <div class="override-row-cfg">
+      <span>"${escapeHtml(word)}" &rarr; ${escapeHtml(response)}</span>
+      <button data-action="remove-override" data-bot="${escapeHtml(botKey)}" data-value="${escapeHtml(word)}">&times;</button>
+    </div>
+  `).join("") || `<span class="config-empty">none</span>`;
+
+  return `
+    <div class="config-block">
+      <h4>Callout response overrides</h4>
+      <div class="override-list-cfg">${rows}</div>
+      <div class="config-add-form">
+        <input type="text" class="override-word-input" placeholder="word" />
+        <input type="text" class="override-response-input" placeholder="response" />
+        <button data-action="add-override" data-bot="${escapeHtml(botKey)}">Add</button>
+      </div>
+    </div>
+  `;
+}
+
+async function refreshConfigPanel(botKey) {
+  const card = botCardsEl.querySelector(`[data-bot-key="${botKey}"]`);
+  const panel = card && card.querySelector(".config-panel");
+  if (!panel) return;
+  const [config, cooldowns] = await Promise.all([
+    api(`/bots/${encodeURIComponent(botKey)}/config`),
+    api(`/cooldowns/${encodeURIComponent(botKey)}`),
+  ]);
+  panel.innerHTML = configSectionHtml(botKey, config, cooldowns);
+  panel.dataset.loaded = "true";
+}
+
+async function refreshBotMeta(botKey) {
+  const freshBots = await api("/bots");
+  bots = freshBots;
+  const fresh = freshBots.find((b) => b.key === botKey);
+  const card = botCardsEl.querySelector(`[data-bot-key="${botKey}"]`);
+  const metaEl = card && card.querySelector(".bot-meta");
+  if (fresh && metaEl) {
+    metaEl.innerHTML = `${escapeHtml(fresh.accountUsername)} &middot; mood: ${escapeHtml(fresh.activeMood)} &middot; ${escapeHtml(fresh.channel)}`;
+  }
+}
+
+botCardsEl.addEventListener("click", async (e) => {
+  const target = e.target.closest("[data-action]");
+  if (!target) return;
+  const botKey = target.dataset.bot;
+  const panel = target.closest(".config-panel");
+  const block = target.closest(".config-block");
+
+  switch (target.dataset.action) {
+    case "remove-chip":
+      await api(`/bots/${encodeURIComponent(botKey)}/${target.dataset.list}/${encodeURIComponent(target.dataset.value)}`, { method: "DELETE" });
+      await refreshConfigPanel(botKey);
+      break;
+    case "add-chip": {
+      const input = block.querySelector(".chip-input");
+      const value = input.value.trim();
+      if (!value) return;
+      await api(`/bots/${encodeURIComponent(botKey)}/${target.dataset.list}`, {
+        method: "POST",
+        body: JSON.stringify({ [target.dataset.field]: value }),
+      });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "remove-override":
+      await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides/${encodeURIComponent(target.dataset.value)}`, { method: "DELETE" });
+      await refreshConfigPanel(botKey);
+      break;
+    case "add-override": {
+      const word = block.querySelector(".override-word-input").value.trim();
+      const response = block.querySelector(".override-response-input").value.trim();
+      if (!word || !response) return;
+      await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides`, { method: "POST", body: JSON.stringify({ word, response }) });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "save-message-length": {
+      const minimum = Number(panel.querySelector('[data-field="msg-min"]').value);
+      const maximum = Number(panel.querySelector('[data-field="msg-max"]').value);
+      await api(`/bots/${encodeURIComponent(botKey)}/message-length`, { method: "POST", body: JSON.stringify({ minimum, maximum }) });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "save-similarity": {
+      const threshold = Number(panel.querySelector('[data-field="similarity"]').value);
+      await api(`/bots/${encodeURIComponent(botKey)}/similarity-threshold`, { method: "POST", body: JSON.stringify({ threshold }) });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "save-min-messages": {
+      const count = Number(panel.querySelector('[data-field="min-messages"]').value);
+      await api(`/bots/${encodeURIComponent(botKey)}/minimum-messages-between`, { method: "POST", body: JSON.stringify({ count }) });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "save-cooldown-durations": {
+      const reads = {
+        wisdom: Number(panel.querySelector('[data-field="cd-wisdom"]').value),
+        callout: Number(panel.querySelector('[data-field="cd-callout"]').value),
+        retry: Number(panel.querySelector('[data-field="cd-retry"]').value),
+        request: Number(panel.querySelector('[data-field="cd-request"]').value),
+      };
+      await Promise.all(Object.entries(reads).map(([type, ms]) =>
+        api(`/bots/${encodeURIComponent(botKey)}/cooldown-duration/${type}`, { method: "POST", body: JSON.stringify({ ms }) })
+      ));
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "save-mainline-interval": {
+      const minMs = Number(panel.querySelector('[data-field="mainline-min"]').value);
+      const maxMs = Number(panel.querySelector('[data-field="mainline-max"]').value);
+      await api(`/bots/${encodeURIComponent(botKey)}/mainline-interval`, { method: "POST", body: JSON.stringify({ minMs, maxMs }) });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+  }
+});
+
+botCardsEl.addEventListener("change", async (e) => {
+  if (!e.target.classList.contains("config-mood-select")) return;
+  const botKey = e.target.dataset.bot;
+  const mood = e.target.value;
+  await api(`/bots/${encodeURIComponent(botKey)}/active-mood`, { method: "POST", body: JSON.stringify({ mood }) });
+  await Promise.all([refreshConfigPanel(botKey), refreshBotMeta(botKey)]);
+});
 
 async function refreshCooldowns() {
   for (const bot of bots) {

@@ -1,5 +1,6 @@
 package com.github.twitch4j.chatbot.kotlin.gui
 
+import com.github.twitch4j.chatbot.kotlin.controller.BotConfigDetail
 import com.github.twitch4j.chatbot.kotlin.controller.BotStatus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
@@ -31,14 +32,16 @@ fun BotStatus.toDto() = BotStatusDto(
 )
 
 @Serializable
-data class CooldownStatusDto(val remainingMs: Long, val ready: Boolean)
+data class CooldownStatusDto(val remainingMs: Long, val ready: Boolean, val configuredMs: Long)
 
-fun CooldownStatus.toDto() = CooldownStatusDto(remainingMs, ready)
+fun CooldownStatus.toDto() = CooldownStatusDto(remainingMs, ready, configuredMs)
 
 @Serializable
 data class CooldownSnapshotDto(
     val label: String,
     val mainline: CooldownStatusDto,
+    val mainlineIntervalMinimumMs: Long,
+    val mainlineIntervalMaximumMs: Long,
     val wisdom: CooldownStatusDto,
     val callout: CooldownStatusDto,
     val retry: CooldownStatusDto,
@@ -48,6 +51,8 @@ data class CooldownSnapshotDto(
 fun CooldownSnapshot.toDto() = CooldownSnapshotDto(
     label = label,
     mainline = mainline.toDto(),
+    mainlineIntervalMinimumMs = mainlineIntervalMinimumMs,
+    mainlineIntervalMaximumMs = mainlineIntervalMaximumMs,
     wisdom = wisdom.toDto(),
     callout = callout.toDto(),
     retry = retry.toDto(),
@@ -120,3 +125,73 @@ data class MockOverrideDto(val keyword: String, val response: String)
 
 @Serializable
 data class SimulateMessageDto(val user: String, val message: String, val channel: String? = null)
+
+@Serializable
+data class BotConfigDetailDto(
+    val key: String,
+    val accountUsername: String,
+    val triggerKeywords: List<String>,
+    val channel: String,
+    val excludedUsers: List<String>,
+    val calloutWords: List<String>,
+    val forbiddenWords: List<String>,
+    val calloutResponseOverrides: Map<String, String>,
+    val messageLengthMinimum: Int,
+    val messageLengthMaximum: Int,
+    val similarityThreshold: Int,
+    val moods: List<String>,
+    val activeMood: String,
+    val minimumMessagesBetween: Int,
+    val helloTriggers: List<String>,
+    val transformWords: List<String>,
+    val selfQuoteMarker: String,
+    val features: List<String>,
+)
+
+fun BotConfigDetail.toDto() = BotConfigDetailDto(
+    key = key,
+    accountUsername = accountUsername,
+    triggerKeywords = triggerKeywords,
+    channel = channel,
+    excludedUsers = excludedUsers,
+    calloutWords = calloutWords,
+    forbiddenWords = forbiddenWords,
+    calloutResponseOverrides = calloutResponseOverrides,
+    messageLengthMinimum = messageLengthMinimum,
+    messageLengthMaximum = messageLengthMaximum,
+    similarityThreshold = similarityThreshold,
+    moods = moods,
+    activeMood = activeMood,
+    minimumMessagesBetween = minimumMessagesBetween,
+    helloTriggers = helloTriggers,
+    transformWords = transformWords,
+    selfQuoteMarker = selfQuoteMarker,
+    features = features,
+)
+
+@Serializable
+data class WordDto(val word: String)
+
+@Serializable
+data class UserDto(val user: String)
+
+@Serializable
+data class CalloutOverrideDto(val word: String, val response: String)
+
+@Serializable
+data class MessageLengthDto(val minimum: Int, val maximum: Int)
+
+@Serializable
+data class SimilarityThresholdDto(val threshold: Int)
+
+@Serializable
+data class ActiveMoodDto(val mood: String)
+
+@Serializable
+data class MinimumMessagesBetweenDto(val count: Int)
+
+@Serializable
+data class CooldownDurationDto(val ms: Long)
+
+@Serializable
+data class MainlineIntervalDto(val minMs: Long, val maxMs: Long)

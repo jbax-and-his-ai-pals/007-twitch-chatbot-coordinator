@@ -20,6 +20,8 @@ private class StubPersonality(override val name: String) : Personality {
     override fun actMainline(event: ChannelMessageEvent) = Unit
     override fun cooldownSnapshot() = throw UnsupportedOperationException("not needed for Scheduler tests")
     override fun adminCooldown(type: CooldownType, action: CooldownAdminAction) = Unit
+    override fun setCooldownConfig(type: CooldownType, ms: Long) = Unit
+    override fun setMainlineIntervalBounds(minMs: Long, maxMs: Long) = Unit
 }
 
 class SchedulerTest {

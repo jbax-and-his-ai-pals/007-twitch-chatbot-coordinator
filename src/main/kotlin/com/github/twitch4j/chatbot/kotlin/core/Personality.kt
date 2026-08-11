@@ -31,6 +31,12 @@ interface Personality {
     /** Read-only status of this bot's cooldown timers, for a GUI to display. */
     fun cooldownSnapshot(): CooldownSnapshot
 
-    /** GUI-driven override of one of this bot's cooldown timers. */
+    /** GUI-driven override of one of this bot's cooldown timers' *remaining* time. */
     fun adminCooldown(type: CooldownType, action: CooldownAdminAction)
+
+    /** GUI-driven reconfiguration of how long the WISDOM/CALLOUT/RETRY/REQUEST timer runs for. */
+    fun setCooldownConfig(type: CooldownType, ms: Long)
+
+    /** GUI-driven reconfiguration of the range a new mainline cooldown is randomly drawn from. */
+    fun setMainlineIntervalBounds(minMs: Long, maxMs: Long)
 }

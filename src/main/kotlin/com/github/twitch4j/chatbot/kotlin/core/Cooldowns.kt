@@ -7,12 +7,20 @@ import kotlin.random.Random
 /** Which of a bot's cooldown timers a GUI admin action targets. */
 enum class CooldownType { MAINLINE, WISDOM, CALLOUT, RETRY, REQUEST }
 
-data class CooldownStatus(val remainingMs: Long, val ready: Boolean)
+/** [configuredMs] is the interval this timer is currently set to run at (not just how much is left). */
+data class CooldownStatus(val remainingMs: Long, val ready: Boolean, val configuredMs: Long)
 
-/** A read-only snapshot of every timer on a [Cooldowns] instance, for display in a GUI. */
+/**
+ * A read-only snapshot of every timer on a [Cooldowns] instance, for display in a GUI.
+ * [mainlineIntervalMinimumMs]/[mainlineIntervalMaximumMs] are the configured bounds a new
+ * mainline cooldown is randomly drawn from on [Cooldowns.resetMainlineCooldown] - distinct
+ * from `mainline.configuredMs`, which is the duration already drawn for the *current* cycle.
+ */
 data class CooldownSnapshot(
     val label: String,
     val mainline: CooldownStatus,
+    val mainlineIntervalMinimumMs: Long,
+    val mainlineIntervalMaximumMs: Long,
     val wisdom: CooldownStatus,
     val callout: CooldownStatus,
     val retry: CooldownStatus,
@@ -38,12 +46,12 @@ class Cooldowns(
     private val mainlineLabel: String,
     startDelay: Long,
     startInstantly: Boolean,
-    private val mainlineIntervalMinimum: Long,
-    private val mainlineIntervalMaximum: Long,
-    private val wisdomCooldownMs: Long,
-    private val calloutCooldownMs: Long,
-    private val retryCooldownMs: Long,
-    private val requestCooldownMs: Long,
+    private var mainlineIntervalMinimum: Long,
+    private var mainlineIntervalMaximum: Long,
+    private var wisdomCooldownMs: Long,
+    private var calloutCooldownMs: Long,
+    private var retryCooldownMs: Long,
+    private var requestCooldownMs: Long,
 ) {
     var mainlineCooldown: Long = startDelay
         private set
@@ -169,6 +177,8 @@ class Cooldowns(
     fun snapshot(): CooldownSnapshot = CooldownSnapshot(
         label = mainlineLabel,
         mainline = statusOf(lastMainlineTime, mainlineCooldown),
+        mainlineIntervalMinimumMs = mainlineIntervalMinimum,
+        mainlineIntervalMaximumMs = mainlineIntervalMaximum,
         wisdom = statusOf(lastWisdomTime, wisdomCooldownMs),
         callout = statusOf(lastCalloutTime, calloutCooldownMs),
         retry = statusOf(lastRetryTime, retryCooldownMs),
@@ -177,7 +187,26 @@ class Cooldowns(
 
     private fun statusOf(lastTime: Instant, interval: Long): CooldownStatus {
         val remaining = timeRemaining(lastTime, interval)
-        return CooldownStatus(remainingMs = remaining.coerceAtLeast(0), ready = remaining <= 0)
+        return CooldownStatus(remainingMs = remaining.coerceAtLeast(0), ready = remaining <= 0, configuredMs = interval)
+    }
+
+    /** Reconfigures how long the WISDOM/CALLOUT/RETRY/REQUEST timer runs for - not its current remaining time, see [admin]. */
+    fun setIntervalMs(type: CooldownType, ms: Long) {
+        require(ms >= 0) { "interval must be >= 0" }
+        when (type) {
+            CooldownType.WISDOM -> wisdomCooldownMs = ms
+            CooldownType.CALLOUT -> calloutCooldownMs = ms
+            CooldownType.RETRY -> retryCooldownMs = ms
+            CooldownType.REQUEST -> requestCooldownMs = ms
+            CooldownType.MAINLINE -> error("MAINLINE is a random range, not a single interval - use setMainlineIntervalBounds")
+        }
+    }
+
+    /** Reconfigures the [minMs, maxMs) range a new mainline cooldown is drawn from on the next [resetMainlineCooldown]. */
+    fun setMainlineIntervalBounds(minMs: Long, maxMs: Long) {
+        require(minMs in 0..maxMs) { "minMs must be >= 0 and <= maxMs" }
+        mainlineIntervalMinimum = minMs
+        mainlineIntervalMaximum = maxMs
     }
 
     /** Force a timer to a GUI-chosen state; does not affect the configured interval itself. */

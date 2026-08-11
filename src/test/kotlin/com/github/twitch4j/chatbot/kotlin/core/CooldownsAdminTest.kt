@@ -2,6 +2,7 @@ package com.github.twitch4j.chatbot.kotlin.core
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -89,6 +90,62 @@ class CooldownsAdminTest {
 
         assertTrue(c.snapshot().request.ready)
         assertFalse(c.isRequestInCooldown())
+    }
+
+    @Test
+    fun `snapshot reports the configured interval alongside remaining and ready`() {
+        val c = cooldowns(startInstantly = true)
+        assertEquals(50_000L, c.snapshot().wisdom.configuredMs)
+        assertEquals(0L, c.snapshot().retry.configuredMs)
+    }
+
+    @Test
+    fun `snapshot reports the mainline interval bounds`() {
+        val c = cooldowns(startInstantly = true)
+        assertEquals(100L, c.snapshot().mainlineIntervalMinimumMs)
+        assertEquals(200L, c.snapshot().mainlineIntervalMaximumMs)
+    }
+
+    @Test
+    fun `setIntervalMs reconfigures a timer's duration, changing both configuredMs and its ready window`() {
+        val c = cooldowns(startInstantly = true)
+        c.markWisdomUsed()
+        assertTrue(c.isWisdomInCooldown())
+
+        c.setIntervalMs(CooldownType.WISDOM, 0L)
+
+        assertEquals(0L, c.snapshot().wisdom.configuredMs)
+        assertFalse(c.isWisdomInCooldown())
+    }
+
+    @Test
+    fun `setIntervalMs rejects MAINLINE - it's a range, not a single duration`() {
+        val c = cooldowns(startInstantly = true)
+        assertThrows(IllegalStateException::class.java) { c.setIntervalMs(CooldownType.MAINLINE, 1000L) }
+    }
+
+    @Test
+    fun `setIntervalMs rejects a negative duration`() {
+        val c = cooldowns(startInstantly = true)
+        assertThrows(IllegalArgumentException::class.java) { c.setIntervalMs(CooldownType.CALLOUT, -1L) }
+    }
+
+    @Test
+    fun `setMainlineIntervalBounds changes the bounds resetMainlineCooldown draws from`() {
+        val c = cooldowns(startInstantly = true)
+
+        c.setMainlineIntervalBounds(5000L, 6000L)
+        c.resetMainlineCooldown()
+
+        assertTrue(c.mainlineCooldown in 5000..5999, "expected a draw from [5000,6000), was ${c.mainlineCooldown}")
+        assertEquals(5000L, c.snapshot().mainlineIntervalMinimumMs)
+        assertEquals(6000L, c.snapshot().mainlineIntervalMaximumMs)
+    }
+
+    @Test
+    fun `setMainlineIntervalBounds rejects an inverted range`() {
+        val c = cooldowns(startInstantly = true)
+        assertThrows(IllegalArgumentException::class.java) { c.setMainlineIntervalBounds(500L, 100L) }
     }
 
     @Test
