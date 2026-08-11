@@ -143,6 +143,81 @@ body {
 }
 .simulate-form button:hover { opacity: 0.9; }
 
+.simulate-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+#presetBotSelect,
+.preset-btn {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 5px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+#presetBotSelect { color: var(--text-dim); }
+.preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.simulate-batch {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.simulate-batch .hint { margin: 0 0 6px; }
+.simulate-batch-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.simulate-batch-row input {
+  width: 70px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.simulate-batch-row button {
+  flex: 1;
+  background: var(--accent);
+  border: none;
+  color: #10121a;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.simulate-batch-row button:hover { opacity: 0.9; }
+.simulate-batch-row button:disabled { opacity: 0.5; cursor: default; }
+.simulate-batch textarea {
+  width: 100%;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 6px;
+}
+.simulate-batch textarea:last-child { margin-bottom: 0; }
+
+.simulate-as-last-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 10px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.simulate-as-last-btn:hover { color: var(--accent); }
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -346,6 +421,10 @@ body {
 .send-form button:hover { opacity: 0.9; }
 
 .recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-top: 12px;
   font-size: 10px;
   text-transform: uppercase;
@@ -474,15 +553,15 @@ body {
 .chip {
   display: inline-flex;
   align-items: center;
-  background: var(--panel-alt);
-  border: 1px solid var(--border);
+  background: hsla(var(--chip-hue, 220), 40%, 60%, 0.12);
+  border: 1px solid hsla(var(--chip-hue, 220), 40%, 60%, 0.4);
   border-radius: 12px;
   padding: 3px 10px;
   font-size: 11px;
   color: var(--text);
   cursor: pointer;
 }
-.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip:hover { border-color: var(--accent); color: var(--accent); background: hsla(var(--chip-hue, 220), 40%, 60%, 0.2); }
 
 .config-add-form { display: flex; gap: 6px; }
 .config-add-form input {

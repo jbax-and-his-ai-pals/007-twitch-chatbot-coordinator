@@ -59,6 +59,15 @@ function escapeHtml(s) {
   })[c]);
 }
 
+/** Deterministic hue (0-359) from a string's text - same text always gets the same color, different text usually doesn't. */
+function hashHue(text) {
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = (hash * 31 + text.charCodeAt(i)) | 0;
+  }
+  return ((hash % 360) + 360) % 360;
+}
+
 // ==================================================================================
 // Reusable edit modal - click-to-edit for single strings, word pairs, and textareas.
 // ==================================================================================
@@ -268,6 +277,105 @@ document.getElementById("simulateForm").addEventListener("submit", async (e) => 
   messageInput.value = "";
 });
 
+// ==================================================================================
+// Quick-fire presets and random batch simulate
+// ==================================================================================
+
+const presetBotSelect = document.getElementById("presetBotSelect");
+
+function populatePresetBotSelect() {
+  const previous = presetBotSelect.value;
+  presetBotSelect.innerHTML = bots.map((b) => `<option value="${escapeHtml(b.key)}">${escapeHtml(b.key)}</option>`).join("");
+  if (bots.some((b) => b.key === previous)) presetBotSelect.value = previous;
+}
+
+function fireSimulate(user, message) {
+  return api("/simulate", { method: "POST", body: JSON.stringify({ user, message }) });
+}
+
+/** Whatever's currently typed in the simulate form's username field, or a generic fallback. */
+function presetTestUser() {
+  return document.getElementById("simulateUser").value.trim() || "tester";
+}
+
+document.querySelector(".simulate-presets").addEventListener("click", async (e) => {
+  const btn = e.target.closest(".preset-btn");
+  if (!btn) return;
+  const bot = bots.find((b) => b.key === presetBotSelect.value);
+  if (!bot) return;
+  const ref = bot.triggerKeywords[0];
+  const user = presetTestUser();
+
+  switch (btn.dataset.preset) {
+    case "hello":
+      await fireSimulate(user, `hi ${ref}`);
+      break;
+    case "yes":
+      await fireSimulate(user, `${ref} yes`);
+      break;
+    case "no":
+      await fireSimulate(user, `${ref} no`);
+      break;
+    case "why":
+      await fireSimulate(user, `${ref} why`);
+      break;
+    case "short":
+      await fireSimulate(user, "hi");
+      break;
+    case "callout": {
+      // botConfig().calloutWords is only this bot's own list - union with the shared common
+      // ones too, since either alone is enough to trigger a callout.
+      const [botConfig, commonConfig] = await Promise.all([
+        api(`/bots/${encodeURIComponent(bot.key)}/config`),
+        api("/common-config"),
+      ]);
+      const words = [...new Set([...botConfig.calloutWords, ...commonConfig.calloutWords])];
+      if (words.length === 0) return;
+      await fireSimulate(user, words[Math.floor(Math.random() * words.length)]);
+      break;
+    }
+  }
+});
+
+const DEFAULT_BATCH_MESSAGES = [
+  "just chatting here", "anyone else watching this", "lol nice one", "gg well played",
+  "that was wild", "what's the game plan", "hey everyone", "wait what happened there",
+  "haha true that", "this is a pretty good stream honestly",
+];
+
+function parsePool(text) {
+  return text.split(/[\n,]/).map((s) => s.trim()).filter(Boolean);
+}
+
+function randomBatchUsername() {
+  return `viewer${Math.floor(Math.random() * 9000) + 100}`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+document.getElementById("batchFireBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("batchFireBtn");
+  const count = Math.max(1, Math.min(200, Number(document.getElementById("batchCount").value) || 10));
+  const userPool = parsePool(document.getElementById("batchUsers").value);
+  const messagePool = parsePool(document.getElementById("batchMessages").value);
+
+  btn.disabled = true;
+  try {
+    for (let i = 0; i < count; i++) {
+      const user = userPool.length ? userPool[Math.floor(Math.random() * userPool.length)] : randomBatchUsername();
+      const message = messagePool.length
+        ? messagePool[Math.floor(Math.random() * messagePool.length)]
+        : DEFAULT_BATCH_MESSAGES[Math.floor(Math.random() * DEFAULT_BATCH_MESSAGES.length)];
+      await fireSimulate(user, message);
+      await sleep(200);
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function connectWebSocket() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${proto}://${location.host}/ws/activity`);
@@ -317,7 +425,10 @@ function renderBotCard(bot) {
         <input type="text" placeholder="Send as ${escapeHtml(bot.key)}..." />
         <button type="submit">Send</button>
       </form>
-      <div class="recent-header">Recent messages</div>
+      <div class="recent-header">
+        Recent messages
+        <button type="button" class="simulate-as-last-btn" data-bot="${escapeHtml(bot.key)}">simulate as last user</button>
+      </div>
       <div class="recent-messages"><div class="recent-empty">no messages yet</div></div>
       <button class="config-toggle" data-bot="${escapeHtml(bot.key)}">&#9881; Configure</button>
       <div class="config-panel" style="display:none"></div>
@@ -338,6 +449,16 @@ function renderBotCard(bot) {
     const opening = panel.style.display === "none";
     panel.style.display = opening ? "block" : "none";
     if (opening && !panel.dataset.loaded) await refreshConfigPanel(bot.key);
+  });
+
+  card.querySelector(".simulate-as-last-btn").addEventListener("click", () => {
+    const list = recentByBot.get(bot.key) || [];
+    const last = [...list].reverse().find((evt) => evt.sourceUser);
+    if (!last) return;
+    document.getElementById("simulateUser").value = last.sourceUser;
+    const messageInput = document.getElementById("simulateMessage");
+    messageInput.focus();
+    document.querySelector(".simulate-card").scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
 
   return card;
@@ -471,7 +592,7 @@ function collapsibleBlockHtml(title, innerHtml) {
 /** Chips are clickable (opens the edit modal, per-item Save/Delete) rather than carrying their own remove button. */
 function chipListBlockHtml(scope, botKey, title, listKey, fieldName, items) {
   const chips = items.map((item) => `
-    <span class="chip" data-action="edit-chip" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-list="${listKey}" data-field="${fieldName}" data-value="${escapeHtml(item)}">${escapeHtml(item)}</span>
+    <span class="chip" style="--chip-hue:${hashHue(item)}" data-action="edit-chip" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-list="${listKey}" data-field="${fieldName}" data-value="${escapeHtml(item)}">${escapeHtml(item)}</span>
   `).join("") || `<span class="config-empty">none</span>`;
 
   return collapsibleBlockHtml(title, `
@@ -898,6 +1019,7 @@ async function loadBots() {
   botCardsEl.innerHTML = "";
   bots.forEach((bot) => botCardsEl.appendChild(renderBotCard(bot)));
   bots.forEach((bot) => renderRecentMessages(bot.key));
+  populatePresetBotSelect();
   await refreshCooldowns();
 }
 

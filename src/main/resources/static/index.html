@@ -29,6 +29,26 @@
           <input id="simulateMessage" placeholder="message" required />
           <button type="submit">Simulate</button>
         </form>
+
+        <div class="simulate-presets">
+          <select id="presetBotSelect"></select>
+          <button type="button" class="preset-btn" data-preset="hello">Hello</button>
+          <button type="button" class="preset-btn" data-preset="yes">Yes</button>
+          <button type="button" class="preset-btn" data-preset="no">No</button>
+          <button type="button" class="preset-btn" data-preset="why">Why</button>
+          <button type="button" class="preset-btn" data-preset="callout">Callout</button>
+          <button type="button" class="preset-btn" data-preset="short">Too short</button>
+        </div>
+
+        <div class="simulate-batch">
+          <p class="hint">Fires several simulated messages in a row, each with a random user/message from the pools below (blank = auto-generated) - good for exercising cooldowns and minimum-messages-between over time.</p>
+          <div class="simulate-batch-row">
+            <input type="number" id="batchCount" value="10" min="1" max="200" title="how many messages" />
+            <button type="button" id="batchFireBtn">Fire random batch</button>
+          </div>
+          <textarea id="batchUsers" rows="2" placeholder="usernames, one per line or comma-separated (blank = auto-generated)"></textarea>
+          <textarea id="batchMessages" rows="2" placeholder="messages, one per line (blank = generic filler text)"></textarea>
+        </div>
       </div>
 
       <div class="panel-header">
