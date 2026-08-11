@@ -20,6 +20,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -56,6 +57,7 @@ class ConfiguredPersonalityTest {
         features: List<FeatureConfig> = listOf(),
         calloutWords: List<String> = listOf(),
         calloutResponseOverrides: Map<String, String> = mapOf(),
+        activityBus: ActivityBus = ActivityBus(),
     ) = ConfiguredPersonality(
         bot = testBotDefinition(
             triggerKeywords = listOf("buttsbot", "neobuttsbot"),
@@ -67,6 +69,7 @@ class ConfiguredPersonalityTest {
         client = client,
         channel = "testchannel",
         genericAI = GenericAI(fakeAI),
+        activityBus = activityBus,
     )
 
     private fun dispatch(p: ConfiguredPersonality, event: ChannelMessageEvent): PersonalityIntent {
@@ -324,6 +327,78 @@ class ConfiguredPersonalityTest {
         dispatch(p, eventFrom("hey buttsbot, turkey time"))
 
         verify { chat.sendMessage("testchannel", "COMMON!") }
+    }
+
+    // ---- Outgoing events record who/what triggered them ----------------------------------
+
+    @Test
+    fun `a hello-back's Outgoing event records the triggering user and message`() {
+        val bus = ActivityBus()
+        val p = personality(activityBus = bus)
+
+        dispatch(p, eventFrom("hi buttsbot", userName = "someviewer"))
+
+        val outgoing = bus.recent().filterIsInstance<ActivityEvent.Outgoing>().single()
+        assertEquals("someviewer", outgoing.sourceUser)
+        assertEquals("hi buttsbot", outgoing.sourceMessage)
+        assertFalse(outgoing.manual)
+    }
+
+    @Test
+    fun `a callout's Outgoing event records the triggering user and message`() {
+        val bus = ActivityBus()
+        val p = personality(calloutWords = listOf("turkey"), calloutResponseOverrides = mapOf("turkey" to "TOIKEY!"), activityBus = bus)
+
+        dispatch(p, eventFrom("hey buttsbot, turkey time", userName = "someviewer"))
+
+        val outgoing = bus.recent().filterIsInstance<ActivityEvent.Outgoing>().single()
+        assertEquals("someviewer", outgoing.sourceUser)
+        assertEquals("hey buttsbot, turkey time", outgoing.sourceMessage)
+    }
+
+    @Test
+    fun `an easter egg's Outgoing event records the triggering user and message`() {
+        val bus = ActivityBus()
+        val p = personality(
+            helloTriggers = listOf(HelloTrigger(startsWith = "hi {ref}")),
+            features = listOf(FeatureConfig.EasterEgg(whenHello = true, alsoContains = "turkey", response = "you tryna BLAMP wit' me?")),
+            activityBus = bus,
+        )
+
+        dispatch(p, eventFrom("hi buttsbot and turkey too", userName = "someviewer"))
+
+        val outgoing = bus.recent().filterIsInstance<ActivityEvent.Outgoing>().single()
+        assertEquals("someviewer", outgoing.sourceUser)
+        assertEquals("hi buttsbot and turkey too", outgoing.sourceMessage)
+    }
+
+    @Test
+    fun `a retry's two Outgoing events both record the triggering user and message`() {
+        val bus = ActivityBus()
+        val p = personality(features = listOf(FeatureConfig.Retry(triggerPrefix = "try again, ")), activityBus = bus)
+
+        dispatch(p, eventFrom("try again, @neobuttsbot", userName = "someviewer"))
+
+        val outgoing = bus.recent().filterIsInstance<ActivityEvent.Outgoing>()
+        assertEquals(2, outgoing.size)
+        outgoing.forEach {
+            assertEquals("someviewer", it.sourceUser)
+            assertEquals("try again, @neobuttsbot", it.sourceMessage)
+        }
+    }
+
+    @Test
+    fun `the mainline transform's Outgoing event records the triggering user and message`() {
+        val bus = ActivityBus()
+        val p = personality(activityBus = bus)
+        fakeAI.responseProvider = { "this got TESTWORDED nicely" }
+
+        val message = "just a normal chat message that qualifies for the mainline transform"
+        p.actMainline(eventFrom(message, userName = "someviewer"))
+
+        val outgoing = bus.recent().filterIsInstance<ActivityEvent.Outgoing>().single()
+        assertEquals("someviewer", outgoing.sourceUser)
+        assertEquals(message, outgoing.sourceMessage)
     }
 
     @AfterEach

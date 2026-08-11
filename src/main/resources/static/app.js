@@ -143,10 +143,16 @@ function renderRecentMessages(botKey) {
     container.innerHTML = `<div class="recent-empty">no messages yet</div>`;
     return;
   }
-  container.innerHTML = list.slice().reverse().map((evt) => `
-    <div class="recent-message${evt.manual ? " recent-manual" : ""}">
-      <span class="recent-time">${timeStr(evt.timestampMs)}</span>${escapeHtml(evt.message)}
-    </div>`).join("");
+  container.innerHTML = list.slice().reverse().map((evt) => {
+    const sourceHtml = evt.sourceUser
+      ? `<div class="recent-source"><span class="recent-source-user">${escapeHtml(evt.sourceUser)}</span>: ${escapeHtml(evt.sourceMessage)}</div>`
+      : `<div class="recent-source recent-source-manual">sent by operator</div>`;
+    return `
+      <div class="recent-message${evt.manual ? " recent-manual" : ""}">
+        ${sourceHtml}
+        <div class="recent-reply"><span class="recent-time">${timeStr(evt.timestampMs)}</span>${escapeHtml(evt.message)}</div>
+      </div>`;
+  }).join("");
 }
 
 /** Does `evt` match the current filter bar state? Pure - doesn't touch the DOM. */
@@ -343,31 +349,45 @@ function renderBotCard(bot) {
 
 const MATCH_TYPE_LABELS = { starts_with: "starts with", contains: "contains", ends_with: "ends with" };
 
-function configSectionHtml(botKey, config, cooldowns) {
+function configGroupHtml(title, colorClass, innerHtml) {
   return `
-    ${chipListBlockHtml("bot", botKey, "Trigger keywords", "trigger-keywords", "keyword", config.triggerKeywords)}
+    <div class="config-group ${colorClass}">
+      <div class="config-group-title">${escapeHtml(title)}</div>
+      <div class="config-group-body">${innerHtml}</div>
+    </div>
+  `;
+}
 
+function configSectionHtml(botKey, config, cooldowns) {
+  const identity = `
+    ${chipListBlockHtml("bot", botKey, "Trigger keywords", "trigger-keywords", "keyword", config.triggerKeywords)}
     <div class="config-block">
       <h4>Active mood</h4>
       <select class="config-mood-select" data-bot="${escapeHtml(botKey)}">
         ${config.moods.map((m) => `<option value="${escapeHtml(m)}" ${m === config.activeMood ? "selected" : ""}>${escapeHtml(m)}</option>`).join("")}
       </select>
     </div>
+  `;
 
-    ${helloTriggersBlockHtml(botKey, config.helloTriggers)}
+  const greetings = helloTriggersBlockHtml(botKey, config.helloTriggers);
 
+  const moderation = `
     ${chipListBlockHtml("bot", botKey, "Excluded users", "excluded-users", "user", config.excludedUsers)}
     ${chipListBlockHtml("bot", botKey, "Callout words", "callout-words", "word", config.calloutWords)}
     ${chipListBlockHtml("bot", botKey, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
     ${overrideListBlockHtml("bot", botKey, config.calloutResponseOverrides)}
-    ${chipListBlockHtml("bot", botKey, "Transform words", "transform-words", "word", config.transformWords)}
+  `;
 
+  const personality = `
+    ${chipListBlockHtml("bot", botKey, "Transform words", "transform-words", "word", config.transformWords)}
     ${editableTextBlockHtml(botKey, "Self-quote marker", "/self-quote-marker", config.selfQuoteMarker)}
     ${editableTextBlockHtml(botKey, "Prompt: voice", "/prompts/voice", config.prompts.voice, true)}
     ${editableTextBlockHtml(botKey, "Prompt: transform", "/prompts/transform", config.prompts.transform, true)}
     ${editableTextBlockHtml(botKey, "Prompt: wisdom", "/prompts/wisdom", config.prompts.wisdom, true)}
     ${editableTextBlockHtml(botKey, "Prompt: request", "/prompts/request", config.prompts.request, true)}
+  `;
 
+  const timing = `
     <div class="config-block">
       <h4>Message length</h4>
       <div class="config-numfields">
@@ -392,7 +412,9 @@ function configSectionHtml(botKey, config, cooldowns) {
         <button data-action="save-min-messages" data-bot="${escapeHtml(botKey)}">Save</button>
       </div>
     </div>
+  `;
 
+  const cooldownsHtml = `
     <div class="config-block">
       <h4>Cooldown durations (ms)</h4>
       <div class="config-numfields cooldown-durations">
@@ -412,12 +434,22 @@ function configSectionHtml(botKey, config, cooldowns) {
         <button data-action="save-mainline-interval" data-bot="${escapeHtml(botKey)}">Save</button>
       </div>
     </div>
+  `;
 
-    ${config.features.length ? `
-    <div class="config-block">
-      <h4>Features (read-only)</h4>
-      <ul class="config-readonly-list">${config.features.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
-    </div>` : ""}
+  const featuresGroup = config.features.length
+    ? configGroupHtml("Features (read-only)", "config-group-features", `
+        <ul class="config-readonly-list">${config.features.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
+      `)
+    : "";
+
+  return `
+    ${configGroupHtml("Identity & triggers", "config-group-identity", identity)}
+    ${configGroupHtml("Greetings", "config-group-greetings", greetings)}
+    ${configGroupHtml("Moderation", "config-group-moderation", moderation)}
+    ${configGroupHtml("Personality & prompts", "config-group-personality", personality)}
+    ${configGroupHtml("Eligibility & timing", "config-group-timing", timing)}
+    ${configGroupHtml("Cooldowns", "config-group-cooldowns", cooldownsHtml)}
+    ${featuresGroup}
   `;
 }
 
@@ -470,12 +502,14 @@ function overrideListBlockHtml(scope, botKey, overrides) {
 }
 
 function commonConfigSectionHtml(config) {
-  return `
+  const moderation = `
     ${chipListBlockHtml("common", null, "Excluded users", "excluded-users", "user", config.excludedUsers)}
     ${chipListBlockHtml("common", null, "Callout words", "callout-words", "word", config.calloutWords)}
     ${chipListBlockHtml("common", null, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
     ${overrideListBlockHtml("common", null, config.calloutResponseOverrides)}
   `;
+
+  return configGroupHtml("Moderation", "config-group-moderation", moderation);
 }
 
 async function refreshCommonConfigPanel() {

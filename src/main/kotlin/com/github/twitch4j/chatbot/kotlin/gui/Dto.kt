@@ -78,6 +78,8 @@ data class ActivityEventDto(
     val botKey: String? = null,
     val manual: Boolean? = null,
     val simulated: Boolean? = null,
+    val sourceUser: String? = null,
+    val sourceMessage: String? = null,
     val prompt: String? = null,
     val response: String? = null,
     val mocked: Boolean? = null,
@@ -101,6 +103,8 @@ fun ActivityEvent.toDto(): ActivityEventDto = when (this) {
         botKey = botKey,
         message = message,
         manual = manual,
+        sourceUser = sourceUser,
+        sourceMessage = sourceMessage,
     )
 
     is ActivityEvent.AiCall -> ActivityEventDto(

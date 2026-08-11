@@ -101,12 +101,12 @@ class ConfiguredPersonality(
             isNo -> PersonalityIntent.Secondary { beScolded(event) }
             isYes -> PersonalityIntent.Secondary { bePraised(event) }
             isWhy -> PersonalityIntent.Secondary { beWhyd(event) }
-            matchedEasterEgg != null -> PersonalityIntent.Secondary { doEasterEgg(matchedEasterEgg) }
+            matchedEasterEgg != null -> PersonalityIntent.Secondary { doEasterEgg(event, matchedEasterEgg) }
             isHello -> PersonalityIntent.Secondary { doHelloBack(event) }
             referencePrefix != null && !cooldowns.isRequestInCooldown() ->
                 PersonalityIntent.Secondary { doRequest(event, referencePrefix) }
             wisdomMatched && !cooldowns.isWisdomInCooldown() ->
-                PersonalityIntent.Secondary { doWisdom() }
+                PersonalityIntent.Secondary { doWisdom(event) }
             retryPrefix != null && !cooldowns.isRetryInCooldown() ->
                 PersonalityIntent.Secondary { doRetry(event) }
             cooldowns.canActMainline(event.user.name, lastUser, messagesSinceLastMainline, bot.cooldowns.mainline.minimumMessagesBetween) ->
@@ -133,7 +133,7 @@ class ConfiguredPersonality(
             messagesSinceLastMainline = 0
             lastMessage = transformed.transformed
             lastUser = event.user.name
-            send(channel, transformed.transformed)
+            send(channel, transformed.transformed, source = event)
         } else {
             Messaging.info("No action taken.")
         }
@@ -147,38 +147,47 @@ class ConfiguredPersonality(
 
     override fun setMainlineIntervalBounds(minMs: Long, maxMs: Long) = cooldowns.setMainlineIntervalBounds(minMs, maxMs)
 
-    private fun send(targetChannel: String, message: String, manual: Boolean = false) {
+    private fun send(targetChannel: String, message: String, manual: Boolean = false, source: ChannelMessageEvent? = null) {
         client.chat.sendMessage(targetChannel, message)
-        activityBus.publish(ActivityEvent.Outgoing(botKey = bot.key, channel = targetChannel, message = message, manual = manual))
+        activityBus.publish(
+            ActivityEvent.Outgoing(
+                botKey = bot.key,
+                channel = targetChannel,
+                message = message,
+                manual = manual,
+                sourceUser = source?.user?.name,
+                sourceMessage = source?.message,
+            )
+        )
     }
 
     private fun pickTransformWord() = (bot.transform.words.randomOrNull() ?: bot.primaryKeyword).uppercase()
 
     private fun bePraised(event: ChannelMessageEvent) {
         Messaging.green("\tTHEY LOVE ME!")
-        send(channel, ":D")
+        send(channel, ":D", source = event)
     }
 
     private fun beScolded(event: ChannelMessageEvent) {
         Messaging.info("THEY NO LIKE ME :(")
-        send(channel, ":(")
+        send(channel, ":(", source = event)
     }
 
     private fun beWhyd(event: ChannelMessageEvent) {
         Messaging.info("THEY NOT SURE ABOUT ME !?!!!?")
-        send(channel, "O_o")
+        send(channel, "O_o", source = event)
     }
 
-    private fun doEasterEgg(egg: FeatureConfig.EasterEgg) {
+    private fun doEasterEgg(event: ChannelMessageEvent, egg: FeatureConfig.EasterEgg) {
         Messaging.purple("\t${egg.response}")
-        send(channel, egg.response)
+        send(channel, egg.response, source = event)
     }
 
     /** [matchedPrefix] is the lowercase reference prefix that matched; sliced from the original-cased message. */
     private fun doJerbRequest(event: ChannelMessageEvent, matchedPrefix: String) {
         val request = event.message.substring(matchedPrefix.length)
         val response = genericAI.request(bot, request)
-        send(channel, response)
+        send(channel, response, source = event)
     }
 
     private fun doHelloBack(event: ChannelMessageEvent) {
@@ -191,27 +200,27 @@ class ConfiguredPersonality(
         }
 
         Messaging.green("\tHELLO BACK - $response")
-        send(channel, response)
+        send(channel, response, source = event)
     }
 
-    private fun doWisdom() {
+    private fun doWisdom(event: ChannelMessageEvent) {
         val wisdom = genericAI.wisdom(bot)
         Messaging.cyan("\t$wisdom")
-        send(channel, wisdom)
+        send(channel, wisdom, source = event)
         cooldowns.markWisdomUsed()
     }
 
     private fun doRequest(event: ChannelMessageEvent, matchedPrefix: String) {
         val response = genericAI.request(bot, event.message.substring(matchedPrefix.length))
         Messaging.requestResponse(response)
-        send(channel, response)
+        send(channel, response, source = event)
         cooldowns.markRequestUsed()
     }
 
     private fun doRetry(event: ChannelMessageEvent) {
         val retried = genericAI.transform(bot, lastMessage, pickTransformWord())
-        send("jerbtrundles", retried)
-        send(channel, retried)
+        send("jerbtrundles", retried, source = event)
+        send(channel, retried, source = event)
         cooldowns.markRetryUsed()
     }
 
@@ -219,7 +228,7 @@ class ConfiguredPersonality(
         if (!cooldowns.isCalloutInCooldown()) {
             eligibility.calloutWordsList.firstOrNull()?.let {
                 val message = bot.calloutResponseOverrides[it] ?: commonConfig.calloutResponseOverrides[it] ?: (it.uppercase() + "!")
-                send(channel, message)
+                send(channel, message, source = event)
                 Messaging.callout(message)
                 cooldowns.markCalloutUsed()
             }

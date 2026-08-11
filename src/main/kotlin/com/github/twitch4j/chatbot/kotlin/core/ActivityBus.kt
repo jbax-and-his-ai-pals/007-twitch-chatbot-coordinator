@@ -30,6 +30,9 @@ sealed class ActivityEvent {
         val message: String,
         /** True when sent via the GUI's "send as this bot" control rather than bot logic. */
         val manual: Boolean = false,
+        /** The chat user/message that triggered this reply - null only for manual ("send as bot") sends. */
+        val sourceUser: String? = null,
+        val sourceMessage: String? = null,
         override val timestamp: Instant = Instant.now(),
     ) : ActivityEvent()
 

@@ -125,6 +125,8 @@ class AdminControllerTest {
         assertEquals("blampbot", event.botKey)
         assertEquals("hello from the operator", event.message)
         assertTrue(event.manual)
+        assertNull(event.sourceUser)
+        assertNull(event.sourceMessage)
     }
 
     @Test

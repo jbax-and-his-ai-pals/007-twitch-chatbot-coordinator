@@ -359,12 +359,28 @@ body {
   font-size: 12px;
 }
 .recent-message {
-  padding: 4px 0;
+  padding: 5px 0;
   border-bottom: 1px solid rgba(255,255,255,0.03);
   color: var(--text);
   word-break: break-word;
 }
-.recent-message.recent-manual { color: var(--purple); }
+.recent-source {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-bottom: 2px;
+  word-break: break-word;
+}
+.recent-source-user { color: var(--accent); font-weight: 600; }
+.recent-source-manual { font-style: italic; }
+.recent-reply { padding-left: 12px; position: relative; }
+.recent-reply::before {
+  content: "\21B3";
+  position: absolute;
+  left: 0;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.recent-message.recent-manual .recent-reply { color: var(--purple); }
 .recent-time { color: var(--text-dim); margin-right: 6px; font-size: 10px; }
 .recent-empty { color: var(--text-dim); font-size: 11px; font-style: italic; }
 
@@ -386,6 +402,37 @@ body {
   padding-top: 10px;
   border-top: 1px solid var(--border);
 }
+
+.config-group {
+  border-left: 3px solid var(--border);
+  border-radius: 2px;
+  padding: 2px 0 2px 12px;
+  margin-bottom: 18px;
+}
+.config-group:last-child { margin-bottom: 0; }
+.config-group-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.config-group-body > .config-block:last-child { margin-bottom: 0; }
+
+.config-group-identity { border-left-color: var(--accent); }
+.config-group-identity > .config-group-title { color: var(--accent); }
+.config-group-greetings { border-left-color: var(--green); }
+.config-group-greetings > .config-group-title { color: var(--green); }
+.config-group-moderation { border-left-color: var(--red); }
+.config-group-moderation > .config-group-title { color: var(--red); }
+.config-group-personality { border-left-color: var(--purple); }
+.config-group-personality > .config-group-title { color: var(--purple); }
+.config-group-timing { border-left-color: var(--cyan); }
+.config-group-timing > .config-group-title { color: var(--cyan); }
+.config-group-cooldowns { border-left-color: var(--yellow); }
+.config-group-cooldowns > .config-group-title { color: var(--yellow); }
+.config-group-features { border-left-color: var(--text-dim); }
+.config-group-features > .config-group-title { color: var(--text-dim); }
 
 .config-block { margin-bottom: 14px; }
 .config-block h4 {
