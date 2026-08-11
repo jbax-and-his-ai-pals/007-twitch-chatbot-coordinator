@@ -5,6 +5,7 @@ import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
+import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
@@ -73,6 +74,14 @@ data class BotConfigDetail(
     val prompts: PromptsDetail,
 )
 
+/** The shared words/users every bot recognizes alike, on top of whatever it adds itself - see [CommonConfig]. */
+data class CommonConfigDetail(
+    val excludedUsers: List<String>,
+    val calloutWords: List<String>,
+    val forbiddenWords: List<String>,
+    val calloutResponseOverrides: Map<String, String>,
+)
+
 /**
  * Pure, network-free facade over a running [Controller]'s bots - everything the GUI needs
  * to read or drive, built from already-constructed [Personality]/[ITwitchClient]
@@ -85,7 +94,8 @@ data class BotConfigDetail(
  * between) all edit the live [com.github.twitch4j.chatbot.kotlin.core.BotDefinition]/
  * [com.github.twitch4j.chatbot.kotlin.core.Cooldowns] a bot is already running with -
  * `ProcessedEvent`/`ConfiguredPersonality` read those fields fresh on every dispatch, so
- * changes apply to the very next message. They're session-only: nothing is written back to
+ * changes apply to the very next message. [commonConfig] mutations work the same way but
+ * apply to every bot at once. They're all session-only: nothing is written back to
  * `config.yaml`, so a restart reverts to the file (re-serializing YAML would strip its
  * comments/formatting, which felt like the wrong trade for a "tune while testing" tool).
  * `api`/`credentials` are never exposed or mutable through this class - they're secrets.
@@ -96,6 +106,7 @@ class AdminController(
     private val activityBus: ActivityBus,
     private val mockModeState: MockModeState,
     private val mockAiClient: MockAIClient,
+    private val commonConfig: CommonConfig,
 ) {
     private val personalityByKey = personalities.associateBy { it.name }
 
@@ -426,5 +437,75 @@ class AdminController(
     /** Routed through Messaging (not straight to activityBus) so config changes show up in the same debug-log stream as everything else. */
     private fun logConfigChange(botKey: String, description: String) {
         Messaging.info("[$botKey] CONFIG: $description")
+    }
+
+    // ---- Common config: shared across every bot ----------------------------------------
+
+    fun commonConfig(): CommonConfigDetail = CommonConfigDetail(
+        excludedUsers = commonConfig.excludedUsers.sorted(),
+        calloutWords = commonConfig.calloutWords,
+        forbiddenWords = commonConfig.forbiddenWords,
+        calloutResponseOverrides = commonConfig.calloutResponseOverrides,
+    )
+
+    fun addCommonExcludedUser(user: String): Boolean {
+        val normalized = user.trim().lowercase()
+        if (normalized.isEmpty()) return false
+        commonConfig.excludedUsers = commonConfig.excludedUsers + normalized
+        logCommonConfigChange("excluded user added: $normalized")
+        return true
+    }
+
+    fun removeCommonExcludedUser(user: String): Boolean {
+        commonConfig.excludedUsers = commonConfig.excludedUsers - user.trim().lowercase()
+        logCommonConfigChange("excluded user removed: $user")
+        return true
+    }
+
+    fun addCommonCalloutWord(word: String): Boolean {
+        val normalized = word.trim().lowercase()
+        if (normalized.isEmpty() || commonConfig.calloutWords.contains(normalized)) return false
+        commonConfig.calloutWords = commonConfig.calloutWords + normalized
+        logCommonConfigChange("callout word added: $normalized")
+        return true
+    }
+
+    fun removeCommonCalloutWord(word: String): Boolean {
+        commonConfig.calloutWords = commonConfig.calloutWords - word.trim().lowercase()
+        logCommonConfigChange("callout word removed: $word")
+        return true
+    }
+
+    fun addCommonForbiddenWord(word: String): Boolean {
+        val normalized = word.trim().lowercase()
+        if (normalized.isEmpty() || commonConfig.forbiddenWords.contains(normalized)) return false
+        commonConfig.forbiddenWords = commonConfig.forbiddenWords + normalized
+        logCommonConfigChange("forbidden word added: $normalized")
+        return true
+    }
+
+    fun removeCommonForbiddenWord(word: String): Boolean {
+        commonConfig.forbiddenWords = commonConfig.forbiddenWords - word.trim().lowercase()
+        logCommonConfigChange("forbidden word removed: $word")
+        return true
+    }
+
+    /** Used only when a callout word has no per-bot override for it - see [com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality]. */
+    fun setCommonCalloutResponseOverride(word: String, response: String): Boolean {
+        val normalized = word.trim().lowercase()
+        if (normalized.isEmpty()) return false
+        commonConfig.calloutResponseOverrides = commonConfig.calloutResponseOverrides + (normalized to response)
+        logCommonConfigChange("callout response override set: \"$normalized\" -> \"$response\"")
+        return true
+    }
+
+    fun removeCommonCalloutResponseOverride(word: String): Boolean {
+        commonConfig.calloutResponseOverrides = commonConfig.calloutResponseOverrides - word.trim().lowercase()
+        logCommonConfigChange("callout response override removed: $word")
+        return true
+    }
+
+    private fun logCommonConfigChange(description: String) {
+        Messaging.info("[COMMON] CONFIG: $description")
     }
 }

@@ -1,5 +1,6 @@
 const feedEl = document.getElementById("feed");
 const botCardsEl = document.getElementById("botCards");
+const botsPanelEl = document.getElementById("botsPanel");
 const mockSwitch = document.getElementById("mockSwitch");
 const mockLabel = document.getElementById("mockLabel");
 const connStatus = document.getElementById("connStatus");
@@ -281,7 +282,7 @@ const MATCH_TYPE_LABELS = { starts_with: "starts with", contains: "contains", en
 
 function configSectionHtml(botKey, config, cooldowns) {
   return `
-    ${chipListBlockHtml(botKey, "Trigger keywords", "trigger-keywords", "keyword", config.triggerKeywords)}
+    ${chipListBlockHtml("bot", botKey, "Trigger keywords", "trigger-keywords", "keyword", config.triggerKeywords)}
 
     <div class="config-block">
       <h4>Active mood</h4>
@@ -292,11 +293,11 @@ function configSectionHtml(botKey, config, cooldowns) {
 
     ${helloTriggersBlockHtml(botKey, config.helloTriggers)}
 
-    ${chipListBlockHtml(botKey, "Excluded users", "excluded-users", "user", config.excludedUsers)}
-    ${chipListBlockHtml(botKey, "Callout words", "callout-words", "word", config.calloutWords)}
-    ${chipListBlockHtml(botKey, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
-    ${overrideListBlockHtml(botKey, config.calloutResponseOverrides)}
-    ${chipListBlockHtml(botKey, "Transform words", "transform-words", "word", config.transformWords)}
+    ${chipListBlockHtml("bot", botKey, "Excluded users", "excluded-users", "user", config.excludedUsers)}
+    ${chipListBlockHtml("bot", botKey, "Callout words", "callout-words", "word", config.calloutWords)}
+    ${chipListBlockHtml("bot", botKey, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
+    ${overrideListBlockHtml("bot", botKey, config.calloutResponseOverrides)}
+    ${chipListBlockHtml("bot", botKey, "Transform words", "transform-words", "word", config.transformWords)}
 
     ${editableTextBlockHtml(botKey, "Self-quote marker", "/self-quote-marker", config.selfQuoteMarker)}
     ${editableTextBlockHtml(botKey, "Prompt: voice", "/prompts/voice", config.prompts.voice, true)}
@@ -357,10 +358,20 @@ function configSectionHtml(botKey, config, cooldowns) {
   `;
 }
 
+/** `scope` is "bot" (needs `botKey`) or "common" (shared across every bot, `botKey` unused). */
+function scopedPrefix(scope, botKey) {
+  return scope === "common" ? "/common-config" : `/bots/${encodeURIComponent(botKey)}`;
+}
+
+async function refreshScoped(scope, botKey) {
+  if (scope === "common") await refreshCommonConfigPanel();
+  else await refreshConfigPanel(botKey);
+}
+
 /** Chips are clickable (opens the edit modal, per-item Save/Delete) rather than carrying their own remove button. */
-function chipListBlockHtml(botKey, title, listKey, fieldName, items) {
+function chipListBlockHtml(scope, botKey, title, listKey, fieldName, items) {
   const chips = items.map((item) => `
-    <span class="chip" data-action="edit-chip" data-bot="${escapeHtml(botKey)}" data-list="${listKey}" data-field="${fieldName}" data-value="${escapeHtml(item)}">${escapeHtml(item)}</span>
+    <span class="chip" data-action="edit-chip" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-list="${listKey}" data-field="${fieldName}" data-value="${escapeHtml(item)}">${escapeHtml(item)}</span>
   `).join("") || `<span class="config-empty">none</span>`;
 
   return `
@@ -369,15 +380,15 @@ function chipListBlockHtml(botKey, title, listKey, fieldName, items) {
       <div class="chip-list">${chips}</div>
       <div class="config-add-form">
         <input type="text" class="chip-input" placeholder="add..." />
-        <button data-action="add-chip" data-bot="${escapeHtml(botKey)}" data-list="${listKey}" data-field="${fieldName}">Add</button>
+        <button data-action="add-chip" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-list="${listKey}" data-field="${fieldName}">Add</button>
       </div>
     </div>
   `;
 }
 
-function overrideListBlockHtml(botKey, overrides) {
+function overrideListBlockHtml(scope, botKey, overrides) {
   const rows = Object.entries(overrides).map(([word, response]) => `
-    <div class="override-row-cfg" data-action="edit-override" data-bot="${escapeHtml(botKey)}" data-word="${escapeHtml(word)}" data-response="${escapeHtml(response)}">
+    <div class="override-row-cfg" data-action="edit-override" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-word="${escapeHtml(word)}" data-response="${escapeHtml(response)}">
       <span>"${escapeHtml(word)}" &rarr; ${escapeHtml(response)}</span>
     </div>
   `).join("") || `<span class="config-empty">none</span>`;
@@ -389,10 +400,26 @@ function overrideListBlockHtml(botKey, overrides) {
       <div class="config-add-form">
         <input type="text" class="override-word-input" placeholder="word" />
         <input type="text" class="override-response-input" placeholder="response" />
-        <button data-action="add-override" data-bot="${escapeHtml(botKey)}">Add</button>
+        <button data-action="add-override" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}">Add</button>
       </div>
     </div>
   `;
+}
+
+function commonConfigSectionHtml(config) {
+  return `
+    ${chipListBlockHtml("common", null, "Excluded users", "excluded-users", "user", config.excludedUsers)}
+    ${chipListBlockHtml("common", null, "Callout words", "callout-words", "word", config.calloutWords)}
+    ${chipListBlockHtml("common", null, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
+    ${overrideListBlockHtml("common", null, config.calloutResponseOverrides)}
+  `;
+}
+
+async function refreshCommonConfigPanel() {
+  const container = document.getElementById("commonConfigBody");
+  if (!container) return;
+  const config = await api("/common-config");
+  container.innerHTML = commonConfigSectionHtml(config);
 }
 
 /** A single editable string (self-quote marker, or one of the four prompt fields) - click to open the edit modal. */
@@ -463,7 +490,7 @@ async function refreshBotMeta(botKey) {
   }
 }
 
-botCardsEl.addEventListener("click", async (e) => {
+botsPanelEl.addEventListener("click", async (e) => {
   const target = e.target.closest("[data-action]");
   if (!target) return;
   const botKey = target.dataset.bot;
@@ -472,37 +499,40 @@ botCardsEl.addEventListener("click", async (e) => {
 
   switch (target.dataset.action) {
     case "edit-chip": {
-      const { list, field, value } = target.dataset;
+      const { scope, list, field, value } = target.dataset;
+      const prefix = scopedPrefix(scope, botKey);
       openEditModal({
         title: `Edit ${field}`,
         fields: [{ id: "value", value }],
         onSave: async (values) => {
           const newValue = values.value.trim();
           if (!newValue || newValue.toLowerCase() === value.toLowerCase()) return;
-          await api(`/bots/${encodeURIComponent(botKey)}/${list}`, { method: "POST", body: JSON.stringify({ [field]: newValue }) });
-          await api(`/bots/${encodeURIComponent(botKey)}/${list}/${encodeURIComponent(value)}`, { method: "DELETE" });
-          await refreshConfigPanel(botKey);
+          await api(`${prefix}/${list}`, { method: "POST", body: JSON.stringify({ [field]: newValue }) });
+          await api(`${prefix}/${list}/${encodeURIComponent(value)}`, { method: "DELETE" });
+          await refreshScoped(scope, botKey);
         },
         onDelete: async () => {
-          await api(`/bots/${encodeURIComponent(botKey)}/${list}/${encodeURIComponent(value)}`, { method: "DELETE" });
-          await refreshConfigPanel(botKey);
+          await api(`${prefix}/${list}/${encodeURIComponent(value)}`, { method: "DELETE" });
+          await refreshScoped(scope, botKey);
         },
       });
       break;
     }
     case "add-chip": {
+      const { scope, list, field } = target.dataset;
       const input = block.querySelector(".chip-input");
       const value = input.value.trim();
       if (!value) return;
-      await api(`/bots/${encodeURIComponent(botKey)}/${target.dataset.list}`, {
+      await api(`${scopedPrefix(scope, botKey)}/${list}`, {
         method: "POST",
-        body: JSON.stringify({ [target.dataset.field]: value }),
+        body: JSON.stringify({ [field]: value }),
       });
-      await refreshConfigPanel(botKey);
+      await refreshScoped(scope, botKey);
       break;
     }
     case "edit-override": {
-      const { word, response } = target.dataset;
+      const { scope, word, response } = target.dataset;
+      const prefix = scopedPrefix(scope, botKey);
       openEditModal({
         title: "Edit callout response",
         fields: [
@@ -513,25 +543,26 @@ botCardsEl.addEventListener("click", async (e) => {
           const newWord = values.word.trim().toLowerCase();
           const newResponse = values.response.trim();
           if (!newWord || !newResponse) return;
-          await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides`, { method: "POST", body: JSON.stringify({ word: newWord, response: newResponse }) });
+          await api(`${prefix}/callout-overrides`, { method: "POST", body: JSON.stringify({ word: newWord, response: newResponse }) });
           if (newWord !== word.toLowerCase()) {
-            await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides/${encodeURIComponent(word)}`, { method: "DELETE" });
+            await api(`${prefix}/callout-overrides/${encodeURIComponent(word)}`, { method: "DELETE" });
           }
-          await refreshConfigPanel(botKey);
+          await refreshScoped(scope, botKey);
         },
         onDelete: async () => {
-          await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides/${encodeURIComponent(word)}`, { method: "DELETE" });
-          await refreshConfigPanel(botKey);
+          await api(`${prefix}/callout-overrides/${encodeURIComponent(word)}`, { method: "DELETE" });
+          await refreshScoped(scope, botKey);
         },
       });
       break;
     }
     case "add-override": {
+      const { scope } = target.dataset;
       const word = block.querySelector(".override-word-input").value.trim();
       const response = block.querySelector(".override-response-input").value.trim();
       if (!word || !response) return;
-      await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides`, { method: "POST", body: JSON.stringify({ word, response }) });
-      await refreshConfigPanel(botKey);
+      await api(`${scopedPrefix(scope, botKey)}/callout-overrides`, { method: "POST", body: JSON.stringify({ word, response }) });
+      await refreshScoped(scope, botKey);
       break;
     }
     case "edit-text": {
@@ -704,7 +735,7 @@ document.getElementById("addOverride").addEventListener("click", async () => {
 });
 
 async function init() {
-  await Promise.all([loadBots(), loadInitialFeed(), loadMockMode(), loadOverrides()]);
+  await Promise.all([loadBots(), loadInitialFeed(), loadMockMode(), loadOverrides(), refreshCommonConfigPanel()]);
   // loadBots and loadInitialFeed race independently, so re-sync recent-message cards once
   // both have definitely finished, in case events arrived before their bot's card existed.
   bots.forEach((bot) => renderRecentMessages(bot.key));

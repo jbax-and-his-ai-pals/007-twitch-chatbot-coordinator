@@ -4,6 +4,7 @@ import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.chat.ITwitchChat
 import com.github.twitch4j.chatbot.kotlin.controller.AdminController
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
+import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
@@ -73,6 +74,7 @@ class GuiServerSmokeTest {
             activityBus = activityBus,
             mockModeState = MockModeState(),
             mockAiClient = MockAIClient(),
+        commonConfig = CommonConfig(),
         )
 
         val port = freePort()

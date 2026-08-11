@@ -287,6 +287,44 @@ fun Application.guiModule(admin: AdminController) {
                     respondOk(admin.removeHelloTrigger(botKey, index))
                 }
             }
+
+            route("/common-config") {
+                get {
+                    call.respond(admin.commonConfig().toDto())
+                }
+
+                post("/excluded-users") {
+                    val body = call.receive<UserDto>()
+                    respondOk(admin.addCommonExcludedUser(body.user))
+                }
+                delete("/excluded-users/{value}") {
+                    respondOk(admin.removeCommonExcludedUser(call.parameters["value"]!!))
+                }
+
+                post("/callout-words") {
+                    val body = call.receive<WordDto>()
+                    respondOk(admin.addCommonCalloutWord(body.word))
+                }
+                delete("/callout-words/{value}") {
+                    respondOk(admin.removeCommonCalloutWord(call.parameters["value"]!!))
+                }
+
+                post("/forbidden-words") {
+                    val body = call.receive<WordDto>()
+                    respondOk(admin.addCommonForbiddenWord(body.word))
+                }
+                delete("/forbidden-words/{value}") {
+                    respondOk(admin.removeCommonForbiddenWord(call.parameters["value"]!!))
+                }
+
+                post("/callout-overrides") {
+                    val body = call.receive<CalloutOverrideDto>()
+                    respondOk(admin.setCommonCalloutResponseOverride(body.word, body.response))
+                }
+                delete("/callout-overrides/{value}") {
+                    respondOk(admin.removeCommonCalloutResponseOverride(call.parameters["value"]!!))
+                }
+            }
         }
 
         webSocket("/ws/activity") {

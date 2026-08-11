@@ -5,6 +5,7 @@ import com.github.twitch4j.chat.ITwitchChat
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.AIClient
+import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
 import com.github.twitch4j.chatbot.kotlin.core.HelloTrigger
@@ -42,6 +43,7 @@ class AdminControllerTest {
     private lateinit var clientB: ITwitchClient
     private lateinit var activityBus: ActivityBus
     private lateinit var mockModeState: MockModeState
+    private lateinit var commonConfig: CommonConfig
     private lateinit var admin: AdminController
 
     @BeforeEach
@@ -56,6 +58,7 @@ class AdminControllerTest {
 
         activityBus = ActivityBus()
         mockModeState = MockModeState()
+        commonConfig = CommonConfig()
         val mockAiClient = MockAIClient()
 
         val botA = ConfiguredPersonality(
@@ -69,6 +72,7 @@ class AdminControllerTest {
             channel = "testchannel",
             genericAI = GenericAI(SwitchableAIClient("blampbot", mockModeState, activityBus, mock = mockAiClient)),
             activityBus = activityBus,
+            commonConfig = commonConfig,
         )
         val botB = ConfiguredPersonality(
             bot = testBotDefinition(key = "buttsbot", accountUsername = "neobuttsbot", triggerKeywords = listOf("buttsbot")),
@@ -76,6 +80,7 @@ class AdminControllerTest {
             channel = "testchannel",
             genericAI = GenericAI(FakeAIClient()),
             activityBus = activityBus,
+            commonConfig = commonConfig,
         )
 
         admin = AdminController(
@@ -84,6 +89,7 @@ class AdminControllerTest {
             activityBus = activityBus,
             mockModeState = mockModeState,
             mockAiClient = mockAiClient,
+            commonConfig = commonConfig,
         )
 
         Messaging.bus = activityBus
@@ -252,6 +258,7 @@ class AdminControllerTest {
             activityBus = ActivityBus(),
             mockModeState = MockModeState(),
             mockAiClient = MockAIClient(),
+        commonConfig = CommonConfig(),
         )
 
         assertFalse(empty.simulateMessage("someviewer", "hi"))
@@ -369,6 +376,7 @@ class AdminControllerTest {
             activityBus = bus,
             mockModeState = MockModeState(),
             mockAiClient = MockAIClient(),
+        commonConfig = CommonConfig(),
         )
 
         restrictedAdmin.simulateMessage(user = "someviewer", message = "too short")
@@ -417,6 +425,7 @@ class AdminControllerTest {
             activityBus = bus,
             mockModeState = MockModeState(),
             mockAiClient = MockAIClient(),
+        commonConfig = CommonConfig(),
         )
 
         assertEquals("nice", moodyAdmin.botConfig("moody")!!.activeMood)
@@ -589,5 +598,100 @@ class AdminControllerTest {
 
         val outgoing = admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>()
         assertTrue(outgoing.any { it.botKey == "blampbot" }, "expected the new hello trigger to fire, got: $outgoing")
+    }
+
+    // ---- Common config: shared across every bot -----------------------------------------
+
+    @Test
+    fun `commonConfig starts empty and reflects mutations`() {
+        val initial = admin.commonConfig()
+        assertTrue(initial.excludedUsers.isEmpty())
+        assertTrue(initial.calloutWords.isEmpty())
+        assertTrue(initial.forbiddenWords.isEmpty())
+        assertTrue(initial.calloutResponseOverrides.isEmpty())
+    }
+
+    @Test
+    fun `addCommonExcludedUser blocks every bot's reaction, removeCommonExcludedUser un-blocks it`() {
+        assertTrue(admin.addCommonExcludedUser("newuser"))
+        assertTrue(admin.commonConfig().excludedUsers.contains("newuser"))
+
+        admin.simulateMessage(user = "newuser", message = "just a normal chat message here")
+        assertTrue(admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>().isEmpty())
+
+        assertTrue(admin.removeCommonExcludedUser("newuser"))
+        assertFalse(admin.commonConfig().excludedUsers.contains("newuser"))
+
+        // Isolate the "un-blocked" check to blampbot: give it a guaranteed-valid mock
+        // transform, and keep buttsbot's own FakeAIClient (whose default response would fail
+        // transform validity) from being able to "win" Scheduler's pick without ever sending.
+        admin.setMockOverride("", "this got TESTWORDED nicely")
+        admin.addExcludedUser("buttsbot", "newuser")
+
+        admin.simulateMessage(user = "newuser", message = "another normal chat message right here")
+        assertTrue(admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>().any { it.botKey == "blampbot" })
+    }
+
+    @Test
+    fun `addCommonExcludedUser normalizes case+whitespace`() {
+        assertTrue(admin.addCommonExcludedUser("  SomeUser  "))
+        assertTrue(admin.commonConfig().excludedUsers.contains("someuser"))
+    }
+
+    @Test
+    fun `addCommonCalloutWord and removeCommonCalloutWord round-trip`() {
+        assertTrue(admin.addCommonCalloutWord("TURKEY"))
+        assertTrue(admin.commonConfig().calloutWords.contains("turkey"))
+
+        assertTrue(admin.removeCommonCalloutWord("turkey"))
+        assertFalse(admin.commonConfig().calloutWords.contains("turkey"))
+    }
+
+    @Test
+    fun `addCommonCalloutWord does not add a duplicate`() {
+        admin.addCommonCalloutWord("turkey")
+        admin.addCommonCalloutWord("turkey")
+
+        assertEquals(1, admin.commonConfig().calloutWords.count { it == "turkey" })
+    }
+
+    @Test
+    fun `addCommonForbiddenWord and removeCommonForbiddenWord round-trip`() {
+        assertTrue(admin.addCommonForbiddenWord("SPAM"))
+        assertTrue(admin.commonConfig().forbiddenWords.contains("spam"))
+
+        assertTrue(admin.removeCommonForbiddenWord("spam"))
+        assertFalse(admin.commonConfig().forbiddenWords.contains("spam"))
+    }
+
+    @Test
+    fun `setCommonCalloutResponseOverride and removeCommonCalloutResponseOverride round-trip`() {
+        assertTrue(admin.setCommonCalloutResponseOverride("TURKEY", "TOIKEY!"))
+        assertEquals("TOIKEY!", admin.commonConfig().calloutResponseOverrides["turkey"])
+
+        assertTrue(admin.removeCommonCalloutResponseOverride("turkey"))
+        assertFalse(admin.commonConfig().calloutResponseOverrides.containsKey("turkey"))
+    }
+
+    @Test
+    fun `a callout word added only to common config triggers a response from a bot with no matching per-bot word`() {
+        admin.addCommonCalloutWord("turkey")
+        admin.setCommonCalloutResponseOverride("turkey", "TOIKEY!")
+
+        admin.simulateMessage(user = "someviewer", message = "hey blampbot, turkey time")
+
+        val outgoing = admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>()
+        assertTrue(outgoing.any { it.botKey == "blampbot" && it.message == "TOIKEY!" }, "expected the common callout to fire, got: $outgoing")
+    }
+
+    @Test
+    fun `common config mutations are logged so they show up in the activity feed`() {
+        admin.addCommonExcludedUser("someone")
+
+        val logs = admin.recentActivity().filterIsInstance<ActivityEvent.Log>()
+        assertTrue(
+            logs.any { log -> log.segments.any { it.text.contains("[COMMON] CONFIG") && it.text.contains("excluded user added") } },
+            "expected a common-config-change log entry, got: $logs",
+        )
     }
 }

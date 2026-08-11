@@ -4,6 +4,7 @@ import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.chat.ITwitchChat
 import com.github.twitch4j.chatbot.kotlin.controller.AdminController
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
+import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.MoodConfig
@@ -60,6 +61,7 @@ class GuiServerTest {
             activityBus = activityBus,
             mockModeState = MockModeState(),
             mockAiClient = MockAIClient(),
+        commonConfig = CommonConfig(),
         )
         return admin to chat
     }
@@ -256,6 +258,7 @@ class GuiServerTest {
             activityBus = bus,
             mockModeState = MockModeState(),
             mockAiClient = MockAIClient(),
+        commonConfig = CommonConfig(),
         )
 
         application { guiModule(moodyAdmin) }
@@ -397,5 +400,61 @@ class GuiServerTest {
         }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `GET api common-config returns the shared config, starting empty`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val response = client.get("/api/common-config")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val config = json.decodeFromString<CommonConfigDetailDto>(response.bodyAsText())
+        assertTrue(config.excludedUsers.isEmpty())
+        assertTrue(config.calloutWords.isEmpty())
+    }
+
+    @Test
+    fun `common-config excluded users can be added and removed via REST`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val addResponse = client.post("/api/common-config/excluded-users") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(UserDto.serializer(), UserDto("newuser")))
+        }
+        assertEquals(HttpStatusCode.OK, addResponse.status)
+
+        var config = json.decodeFromString<CommonConfigDetailDto>(client.get("/api/common-config").bodyAsText())
+        assertTrue(config.excludedUsers.contains("newuser"))
+
+        val removeResponse = client.delete("/api/common-config/excluded-users/newuser")
+        assertEquals(HttpStatusCode.OK, removeResponse.status)
+
+        config = json.decodeFromString<CommonConfigDetailDto>(client.get("/api/common-config").bodyAsText())
+        assertTrue(!config.excludedUsers.contains("newuser"))
+    }
+
+    @Test
+    fun `common-config callout words and overrides can be set via REST`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val wordResponse = client.post("/api/common-config/callout-words") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(WordDto.serializer(), WordDto("turkey")))
+        }
+        assertEquals(HttpStatusCode.OK, wordResponse.status)
+
+        val overrideResponse = client.post("/api/common-config/callout-overrides") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(CalloutOverrideDto.serializer(), CalloutOverrideDto("turkey", "TOIKEY!")))
+        }
+        assertEquals(HttpStatusCode.OK, overrideResponse.status)
+
+        val config = json.decodeFromString<CommonConfigDetailDto>(client.get("/api/common-config").bodyAsText())
+        assertTrue(config.calloutWords.contains("turkey"))
+        assertEquals("TOIKEY!", config.calloutResponseOverrides["turkey"])
     }
 }

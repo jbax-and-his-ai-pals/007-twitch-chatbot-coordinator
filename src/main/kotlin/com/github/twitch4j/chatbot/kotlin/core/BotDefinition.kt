@@ -1,5 +1,32 @@
 package com.github.twitch4j.chatbot.kotlin.core
 
+/**
+ * Words/users every bot recognizes and handles alike, on top of whatever it adds itself -
+ * one shared, live instance (built in `Controller` from `config.yaml`'s `defaults:` block,
+ * mutable via the GUI's "Common configuration" panel). Unlike [DefaultsConfig] (a one-time
+ * seed baked into each bot's own list at [BotDefinition.resolve] time, for fields that
+ * don't need this - [BotDefinition.messageLength]/[BotDefinition.similarityThreshold]/
+ * [BotDefinition.cooldowns] stay purely per-bot), these four are read fresh by every bot on
+ * every dispatch ([com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent.eligibilityFor]),
+ * so a GUI edit here applies to every bot immediately, and a per-bot list is purely additive
+ * on top of it - never a copy of it.
+ */
+data class CommonConfig(
+    var excludedUsers: Set<String> = setOf(),
+    var calloutWords: List<String> = listOf(),
+    var forbiddenWords: List<String> = listOf(),
+    var calloutResponseOverrides: Map<String, String> = mapOf(),
+) {
+    companion object {
+        fun from(defaults: DefaultsConfig): CommonConfig = CommonConfig(
+            excludedUsers = defaults.excludedUsers.map { it.lowercase() }.toSet(),
+            calloutWords = defaults.calloutWords,
+            forbiddenWords = defaults.forbiddenWords,
+            calloutResponseOverrides = defaults.calloutResponseOverrides,
+        )
+    }
+}
+
 /** [CooldownDefaults] with every per-bot override already resolved. */
 data class ResolvedCooldowns(
     val mainline: MainlineCooldownConfig,
@@ -13,6 +40,11 @@ data class ResolvedCooldowns(
  * One bot's fully-resolved, ready-to-run config: [RawBotConfig] merged on top of
  * [DefaultsConfig]. This is what [com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality]
  * actually runs on - no more per-bot Kotlin subclasses.
+ *
+ * [excludedUsers]/[calloutWords]/[forbiddenWords]/[calloutResponseOverrides] hold only this
+ * bot's *own* additions (`..._add` in YAML, plus its own account) - the shared baseline
+ * every bot also recognizes lives in [CommonConfig] and is checked alongside these at
+ * eligibility time, not merged in here.
  *
  * Several fields are `var` rather than `val` so the GUI's config panel can mutate a running
  * bot's tuning in place - [com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent.eligibilityFor]
@@ -50,8 +82,10 @@ data class BotDefinition(
             require(raw.triggerKeywords.isNotEmpty()) { "Bot '$key' must have at least one trigger keyword" }
 
             // A bot always excludes its own account, regardless of ignore_other_bots -
-            // otherwise it would react to its own outgoing chat messages.
-            val excludedUsers = (defaults.excludedUsers + raw.excludedUsersAdd + raw.accountUsername)
+            // otherwise it would react to its own outgoing chat messages. Shared/default
+            // excluded users live in CommonConfig now, checked alongside this at eligibility
+            // time - not merged in here, so they stay a single live, GUI-editable list.
+            val excludedUsers = (raw.excludedUsersAdd + raw.accountUsername)
                 .map { it.lowercase() }
                 .toSet()
 
@@ -75,9 +109,9 @@ data class BotDefinition(
                 api = raw.api,
                 credentials = raw.credentials,
                 excludedUsers = excludedUsers,
-                calloutWords = defaults.calloutWords + raw.calloutWordsAdd,
-                forbiddenWords = defaults.forbiddenWords + raw.forbiddenWordsAdd,
-                calloutResponseOverrides = defaults.calloutResponseOverrides + raw.calloutResponseOverridesAdd,
+                calloutWords = raw.calloutWordsAdd,
+                forbiddenWords = raw.forbiddenWordsAdd,
+                calloutResponseOverrides = raw.calloutResponseOverridesAdd,
                 messageLength = raw.messageLength ?: defaults.messageLength,
                 similarityThreshold = raw.similarityThreshold ?: defaults.similarityThreshold,
                 cooldowns = cooldowns,

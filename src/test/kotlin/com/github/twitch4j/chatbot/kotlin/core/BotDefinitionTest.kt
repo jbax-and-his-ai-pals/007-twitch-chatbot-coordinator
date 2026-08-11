@@ -28,7 +28,10 @@ class BotDefinitionTest {
     )
 
     @Test
-    fun `merges list additions on top of defaults`() {
+    fun `resolved excluded-user, callout-word, and forbidden-word lists hold only this bot's own additions`() {
+        // defaults.excludedUsers/calloutWords/forbiddenWords no longer get baked in here -
+        // they live in the separate, shared CommonConfig instead (built once in Controller,
+        // checked alongside a bot's own list at eligibility time - see ProcessedEvent).
         val raw = RawBotConfig(
             accountUsername = "grumblebot",
             triggerKeywords = listOf("grumblebot"),
@@ -38,9 +41,9 @@ class BotDefinitionTest {
         )
         val bot = BotDefinition.resolve("grumblebot", raw, defaults)
 
-        assertEquals(setOf("nightbot", "spammer", "grumblebot"), bot.excludedUsers)
-        assertEquals(listOf("turkey", "gravy"), bot.calloutWords)
-        assertEquals(listOf("http", "politics"), bot.forbiddenWords)
+        assertEquals(setOf("spammer", "grumblebot"), bot.excludedUsers)
+        assertEquals(listOf("gravy"), bot.calloutWords)
+        assertEquals(listOf("politics"), bot.forbiddenWords)
     }
 
     @Test
@@ -82,7 +85,11 @@ class BotDefinitionTest {
     }
 
     @Test
-    fun `callout response overrides merge with the bot's additions winning on collision`() {
+    fun `resolved callout response overrides hold only this bot's own additions`() {
+        // As above: defaults.calloutResponseOverrides lives in CommonConfig now, not here -
+        // a bot-specific override for the same word winning over the shared one is proven
+        // at the ConfiguredPersonality/AdminController layer instead, since that's where
+        // both sources are actually consulted together.
         val raw = RawBotConfig(
             accountUsername = "grumblebot",
             triggerKeywords = listOf("grumblebot"),
@@ -90,8 +97,7 @@ class BotDefinitionTest {
         )
         val bot = BotDefinition.resolve("grumblebot", raw, defaults)
 
-        assertEquals("GOBBLE GOBBLE!", bot.calloutResponseOverrides["turkey"])
-        assertEquals("SLURP!", bot.calloutResponseOverrides["gravy"])
+        assertEquals(mapOf("turkey" to "GOBBLE GOBBLE!", "gravy" to "SLURP!"), bot.calloutResponseOverrides)
     }
 
     @Test

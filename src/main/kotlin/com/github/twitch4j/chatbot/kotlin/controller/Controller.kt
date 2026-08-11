@@ -8,6 +8,7 @@ import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
+import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.Configuration
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MessageDispatcher
@@ -27,9 +28,10 @@ import com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI
  *
  * Also wires up everything the GUI control panel needs: a shared [ActivityBus] every bot
  * publishes chat/AI activity to, a shared [MockModeState] so the GUI's mock-mode switch
- * affects every bot's LLM calls at once, and [admin] - a network-free facade exposing all
- * of it, since this class itself can't be unit-tested (`createClient` connects to real
- * Twitch via `TwitchClientBuilder.build()`).
+ * affects every bot's LLM calls at once, a shared [CommonConfig] (seeded from
+ * `config.yaml`'s `defaults:` block) for words/users every bot recognizes alike, and
+ * [admin] - a network-free facade exposing all of it, since this class itself can't be
+ * unit-tested (`createClient` connects to real Twitch via `TwitchClientBuilder.build()`).
  */
 class Controller(private val configuration: Configuration) {
     private val definitions: List<BotDefinition> = run {
@@ -53,6 +55,7 @@ class Controller(private val configuration: Configuration) {
     private val activityBus = ActivityBus().also { Messaging.bus = it }
     private val mockModeState = MockModeState()
     private val mockAiClient = MockAIClient()
+    private val commonConfig = CommonConfig.from(configuration.defaults)
 
     private val personalities: List<Personality> = definitions.map { def ->
         ConfiguredPersonality(
@@ -63,6 +66,7 @@ class Controller(private val configuration: Configuration) {
                 SwitchableAIClient(botKey = def.key, state = mockModeState, activityBus = activityBus, mock = mockAiClient)
             ),
             activityBus = activityBus,
+            commonConfig = commonConfig,
         )
     }
 
@@ -73,6 +77,7 @@ class Controller(private val configuration: Configuration) {
         activityBus = activityBus,
         mockModeState = mockModeState,
         mockAiClient = mockAiClient,
+        commonConfig = commonConfig,
     )
 
     fun start() {

@@ -8,7 +8,13 @@ channels:
     - "thecheeseball81"
     - "jerbtrundles"
 
-# Shared baseline every bot inherits unless it overrides/extends a field below.
+# Shared baseline every bot starts from. message_length/similarity_threshold/cooldowns are
+# a one-time per-bot starting point (each bot can override them, then they're independent -
+# also editable per-bot from the GUI's Configure panel). excluded_users/callout_words/
+# forbidden_words/callout_response_overrides work differently: they seed a single shared,
+# live "common configuration" every bot checks *in addition to* its own list (see each
+# bot's own `..._add` fields below) - editable from the GUI's "Common configuration" panel,
+# and a change there applies to every bot immediately, no restart needed.
 defaults:
     message_length:
         minimum: 20

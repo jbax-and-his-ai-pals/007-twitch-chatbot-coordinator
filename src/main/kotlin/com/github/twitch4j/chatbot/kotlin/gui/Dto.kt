@@ -2,6 +2,7 @@ package com.github.twitch4j.chatbot.kotlin.gui
 
 import com.github.twitch4j.chatbot.kotlin.controller.BotConfigDetail
 import com.github.twitch4j.chatbot.kotlin.controller.BotStatus
+import com.github.twitch4j.chatbot.kotlin.controller.CommonConfigDetail
 import com.github.twitch4j.chatbot.kotlin.controller.HelloTriggerDetail
 import com.github.twitch4j.chatbot.kotlin.controller.PromptsDetail
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
@@ -223,3 +224,18 @@ data class StringValueDto(val value: String)
 
 @Serializable
 data class HelloTriggerRequestDto(val matchType: String, val value: String, val alsoContains: String? = null)
+
+@Serializable
+data class CommonConfigDetailDto(
+    val excludedUsers: List<String>,
+    val calloutWords: List<String>,
+    val forbiddenWords: List<String>,
+    val calloutResponseOverrides: Map<String, String>,
+)
+
+fun CommonConfigDetail.toDto() = CommonConfigDetailDto(
+    excludedUsers = excludedUsers,
+    calloutWords = calloutWords,
+    forbiddenWords = forbiddenWords,
+    calloutResponseOverrides = calloutResponseOverrides,
+)

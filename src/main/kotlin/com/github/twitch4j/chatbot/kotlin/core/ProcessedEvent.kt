@@ -5,8 +5,8 @@ import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 /**
  * Message-intrinsic facts, computed once per incoming chat message - independent of any
  * particular bot's config. Per-bot facts (excluded user, forbidden/callout word matches,
- * length limits) can no longer be shared across bots now that those lists are
- * per-[BotDefinition], so they're computed on demand via [eligibilityFor] instead.
+ * length limits) are computed on demand via [eligibilityFor] instead, since they depend on
+ * a [BotDefinition] (per-bot) plus a shared [CommonConfig] (every bot alike).
  */
 class ProcessedEvent private constructor(
     val event: ChannelMessageEvent,
@@ -16,11 +16,12 @@ class ProcessedEvent private constructor(
 ) {
     val containsEmoji = emojiList.isNotEmpty()
 
-    fun eligibilityFor(bot: BotDefinition): BotEligibility {
+    /** [common] is checked alongside [bot]'s own lists - either recognizing something is enough. */
+    fun eligibilityFor(bot: BotDefinition, common: CommonConfig): BotEligibility {
         val message = event.message.lowercase()
-        val calloutWordsList = bot.calloutWords.filter { message.contains(it) }
-        val forbiddenWordsList = bot.forbiddenWords.filter { message.contains(it) }
-        val userIsExcluded = bot.excludedUsers.any { event.user.name.lowercase().contains(it) }
+        val calloutWordsList = (bot.calloutWords + common.calloutWords).filter { message.contains(it) }
+        val forbiddenWordsList = (bot.forbiddenWords + common.forbiddenWords).filter { message.contains(it) }
+        val userIsExcluded = (bot.excludedUsers + common.excludedUsers).any { event.user.name.lowercase().contains(it) }
         val messageTooSmall = event.message.length < bot.messageLength.minimum
         val messageTooLarge = event.message.length > bot.messageLength.maximum
         val containsCallout = calloutWordsList.isNotEmpty()

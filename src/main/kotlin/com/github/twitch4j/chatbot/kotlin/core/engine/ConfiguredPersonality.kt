@@ -6,6 +6,7 @@ import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.BotEligibility
+import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
@@ -29,6 +30,8 @@ import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
  * [genericAI] defaults to the real Gemini-backed client but can be swapped for a fake in
  * tests - see `FakeAIClient`. [activityBus] defaults to a fresh, unobserved bus so
  * existing tests are unaffected; the GUI wires in a shared one via [com.github.twitch4j.chatbot.kotlin.controller.Controller].
+ * [commonConfig] likewise defaults to an empty, unshared instance in tests; the GUI wires
+ * in one shared instance across every bot, for words/users every bot should recognize.
  */
 class ConfiguredPersonality(
     private val bot: BotDefinition,
@@ -36,6 +39,7 @@ class ConfiguredPersonality(
     override val channel: String,
     private val genericAI: GenericAI = GenericAI(),
     private val activityBus: ActivityBus = ActivityBus(),
+    private val commonConfig: CommonConfig = CommonConfig(),
 ) : Personality {
     override val name = bot.key
     override val definition: BotDefinition get() = bot
@@ -68,7 +72,7 @@ class ConfiguredPersonality(
         cooldowns.printCooldownMessages()
         messagesSinceLastMainline++
 
-        val eligibility = processed.eligibilityFor(bot)
+        val eligibility = processed.eligibilityFor(bot, commonConfig)
         eligibility.printStatus(event)
         val message = event.message.lowercase()
 
@@ -214,7 +218,7 @@ class ConfiguredPersonality(
     private fun doCallout(event: ChannelMessageEvent, eligibility: BotEligibility) {
         if (!cooldowns.isCalloutInCooldown()) {
             eligibility.calloutWordsList.firstOrNull()?.let {
-                val message = bot.calloutResponseOverrides[it] ?: (it.uppercase() + "!")
+                val message = bot.calloutResponseOverrides[it] ?: commonConfig.calloutResponseOverrides[it] ?: (it.uppercase() + "!")
                 send(channel, message)
                 Messaging.callout(message)
                 cooldowns.markCalloutUsed()

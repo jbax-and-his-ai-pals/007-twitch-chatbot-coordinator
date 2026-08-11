@@ -5,6 +5,7 @@ import com.github.twitch4j.chat.ITwitchChat
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
+import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.FeatureConfig
 import com.github.twitch4j.chatbot.kotlin.core.HelloTrigger
 import com.github.twitch4j.chatbot.kotlin.core.MessageLengthConfig
@@ -241,6 +242,88 @@ class ConfiguredPersonalityTest {
         } finally {
             Messaging.bus = null
         }
+    }
+
+    // ---- CommonConfig: shared words/users every bot recognizes alike -------------------
+
+    @Test
+    fun `a user excluded only in CommonConfig is still excluded, with no per-bot exclusion needed`() {
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(triggerKeywords = listOf("buttsbot"), excludedUsers = setOf("buttsbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(fakeAI),
+            commonConfig = CommonConfig(excludedUsers = setOf("nightbot")),
+        )
+
+        val intent = dispatch(p, eventFrom("this is a perfectly normal chat message here", userName = "nightbot"))
+
+        assertTrue(intent is PersonalityIntent.None)
+        verify(exactly = 0) { chat.sendMessage(any(), any()) }
+    }
+
+    @Test
+    fun `a callout word defined only in CommonConfig still triggers the callout path`() {
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(triggerKeywords = listOf("buttsbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(fakeAI),
+            commonConfig = CommonConfig(calloutWords = listOf("turkey"), calloutResponseOverrides = mapOf("turkey" to "TOIKEY!")),
+        )
+
+        dispatch(p, eventFrom("hey buttsbot, turkey time"))
+
+        verify { chat.sendMessage("testchannel", "TOIKEY!") }
+    }
+
+    @Test
+    fun `a forbidden word defined only in CommonConfig blocks an otherwise-eligible message`() {
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(triggerKeywords = listOf("buttsbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(fakeAI),
+            commonConfig = CommonConfig(forbiddenWords = listOf("spam")),
+        )
+
+        val intent = dispatch(p, eventFrom("this message contains spam unfortunately"))
+
+        assertTrue(intent is PersonalityIntent.None)
+    }
+
+    @Test
+    fun `a bot's own callout response override wins over CommonConfig's for the same word`() {
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(
+                triggerKeywords = listOf("buttsbot"),
+                calloutWords = listOf("turkey"),
+                calloutResponseOverrides = mapOf("turkey" to "BOT-SPECIFIC!"),
+            ),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(fakeAI),
+            commonConfig = CommonConfig(calloutResponseOverrides = mapOf("turkey" to "COMMON!")),
+        )
+
+        dispatch(p, eventFrom("hey buttsbot, turkey time"))
+
+        verify { chat.sendMessage("testchannel", "BOT-SPECIFIC!") }
+    }
+
+    @Test
+    fun `falls back to CommonConfig's callout response override when the bot has none for that word`() {
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(triggerKeywords = listOf("buttsbot"), calloutWords = listOf("turkey")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(fakeAI),
+            commonConfig = CommonConfig(calloutResponseOverrides = mapOf("turkey" to "COMMON!")),
+        )
+
+        dispatch(p, eventFrom("hey buttsbot, turkey time"))
+
+        verify { chat.sendMessage("testchannel", "COMMON!") }
     }
 
     @AfterEach
