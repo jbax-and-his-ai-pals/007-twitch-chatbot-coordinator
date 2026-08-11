@@ -3,8 +3,12 @@ package com.github.twitch4j.chatbot.kotlin.core.engine
 import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.chat.ITwitchChat
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
+import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
+import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.FeatureConfig
 import com.github.twitch4j.chatbot.kotlin.core.HelloTrigger
+import com.github.twitch4j.chatbot.kotlin.core.MessageLengthConfig
+import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
 import com.github.twitch4j.chatbot.kotlin.core.testBotDefinition
@@ -12,6 +16,7 @@ import com.github.twitch4j.common.events.domain.EventUser
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -191,5 +196,36 @@ class ConfiguredPersonalityTest {
         p.actMainline(eventFrom("just a normal chat message here"))
 
         verify { chat.sendMessage("testchannel", "this got TESTWORDED nicely") }
+    }
+
+    @Test
+    fun `a too-short message logs the reason, so a silently-ignored message isn't a silent mystery`() {
+        val bus = ActivityBus()
+        Messaging.bus = bus
+        try {
+            val p = ConfiguredPersonality(
+                bot = testBotDefinition(
+                    triggerKeywords = listOf("buttsbot"),
+                    messageLength = MessageLengthConfig(minimum = 20, maximum = 100),
+                ),
+                client = client,
+                channel = "testchannel",
+                genericAI = GenericAI(fakeAI),
+            )
+
+            val intent = dispatch(p, eventFrom("this is a test"))
+
+            assertTrue(intent is PersonalityIntent.None)
+            val logs = bus.recent().filterIsInstance<ActivityEvent.Log>()
+            assertTrue(logs.any { it.text.contains("MESSAGE TOO SHORT") }, "expected a too-short diagnostic, got: $logs")
+        } finally {
+            Messaging.bus = null
+        }
+    }
+
+    @AfterEach
+    fun resetMessagingBus() {
+        // Belt-and-suspenders in case a test above this line throws before its own reset.
+        Messaging.bus = null
     }
 }

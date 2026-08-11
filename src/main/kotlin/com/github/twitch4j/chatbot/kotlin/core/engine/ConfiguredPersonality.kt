@@ -66,6 +66,7 @@ class ConfiguredPersonality(
         messagesSinceLastMainline++
 
         val eligibility = processed.eligibilityFor(bot)
+        eligibility.printStatus(event)
         val message = event.message.lowercase()
 
         // "<reference>, " prefix - shared by the privileged jerb request and the public request trigger
