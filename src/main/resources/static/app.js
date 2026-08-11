@@ -4,10 +4,22 @@ const mockSwitch = document.getElementById("mockSwitch");
 const mockLabel = document.getElementById("mockLabel");
 const connStatus = document.getElementById("connStatus");
 const showAiCalls = document.getElementById("showAiCalls");
+const showDebugLog = document.getElementById("showDebugLog");
 const overridesListEl = document.getElementById("overridesList");
 
 const COOLDOWN_TYPES = ["mainline", "wisdom", "callout", "retry", "request"];
+const RECENT_MESSAGES_LIMIT = 8;
+const LOG_LEVEL_CLASS = {
+  error: "tag-log-error",
+  warn: "tag-log-warn",
+  success: "tag-log-success",
+  callout: "tag-log-callout",
+  highlight: "tag-log-highlight",
+  info: "tag-log-info",
+  message: "tag-log-message",
+};
 let bots = [];
+const recentByBot = new Map();
 
 async function api(path, options) {
   const res = await fetch(`/api${path}`, {
@@ -30,8 +42,34 @@ function escapeHtml(s) {
   })[c]);
 }
 
+function recordOutgoing(evt) {
+  const list = recentByBot.get(evt.botKey) || [];
+  list.push(evt);
+  while (list.length > RECENT_MESSAGES_LIMIT) list.shift();
+  recentByBot.set(evt.botKey, list);
+  renderRecentMessages(evt.botKey);
+}
+
+function renderRecentMessages(botKey) {
+  const card = botCardsEl.querySelector(`[data-bot-key="${botKey}"]`);
+  const container = card && card.querySelector(".recent-messages");
+  if (!container) return;
+
+  const list = recentByBot.get(botKey) || [];
+  if (list.length === 0) {
+    container.innerHTML = `<div class="recent-empty">no messages yet</div>`;
+    return;
+  }
+  container.innerHTML = list.slice().reverse().map((evt) => `
+    <div class="recent-message${evt.manual ? " recent-manual" : ""}">
+      <span class="recent-time">${timeStr(evt.timestampMs)}</span>${escapeHtml(evt.message)}
+    </div>`).join("");
+}
+
 function appendFeedEntry(evt) {
   if (evt.type === "ai_call" && !showAiCalls.checked) return;
+  if (evt.type === "log" && !showDebugLog.checked) return;
+  if (evt.type === "outgoing") recordOutgoing(evt);
 
   const atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
   const row = document.createElement("div");
@@ -55,6 +93,12 @@ function appendFeedEntry(evt) {
       `<span class="feed-bot">${escapeHtml(evt.botKey)}</span>` +
       `<span class="feed-ai-detail">prompt: ${escapeHtml(evt.prompt.slice(0, 200))}</span>` +
       `<span class="feed-ai-detail">reply: ${escapeHtml(evt.response)}</span>`;
+  } else if (evt.type === "log") {
+    const cls = LOG_LEVEL_CLASS[evt.level] || "tag-log-message";
+    row.classList.add("feed-entry-log");
+    row.innerHTML = `<span class="feed-time">${timeStr(evt.timestampMs)}</span>` +
+      `<span class="feed-tag ${cls}">LOG</span>` +
+      `<span class="feed-log-text">${escapeHtml(evt.message)}</span>`;
   }
 
   feedEl.appendChild(row);
@@ -121,6 +165,8 @@ function renderBotCard(bot) {
       <input type="text" placeholder="Send as ${escapeHtml(bot.key)}..." />
       <button type="submit">Send</button>
     </form>
+    <div class="recent-header">Recent messages</div>
+    <div class="recent-messages"><div class="recent-empty">no messages yet</div></div>
   `;
 
   card.querySelector("form").addEventListener("submit", async (e) => {
@@ -160,6 +206,7 @@ async function loadBots() {
   bots = await api("/bots");
   botCardsEl.innerHTML = "";
   bots.forEach((bot) => botCardsEl.appendChild(renderBotCard(bot)));
+  bots.forEach((bot) => renderRecentMessages(bot.key));
   await refreshCooldowns();
 }
 
@@ -212,6 +259,9 @@ document.getElementById("addOverride").addEventListener("click", async () => {
 
 async function init() {
   await Promise.all([loadBots(), loadInitialFeed(), loadMockMode(), loadOverrides()]);
+  // loadBots and loadInitialFeed race independently, so re-sync recent-message cards once
+  // both have definitely finished, in case events arrived before their bot's card existed.
+  bots.forEach((bot) => renderRecentMessages(bot.key));
   connectWebSocket();
   setInterval(refreshCooldowns, 1000);
 }

@@ -196,6 +196,17 @@ body {
 .tag-manual { background: rgba(192,132,252,0.15); color: var(--purple); }
 .tag-ai { background: rgba(34,211,238,0.15); color: var(--cyan); }
 
+.tag-log-error { background: rgba(248,113,113,0.15); color: var(--red); }
+.tag-log-warn { background: rgba(251,191,36,0.15); color: var(--yellow); }
+.tag-log-success { background: rgba(74,222,128,0.15); color: var(--green); }
+.tag-log-callout { background: rgba(122,138,255,0.15); color: var(--accent); }
+.tag-log-highlight { background: rgba(192,132,252,0.15); color: var(--purple); }
+.tag-log-info { background: rgba(34,211,238,0.15); color: var(--cyan); }
+.tag-log-message { background: rgba(154,160,176,0.15); color: var(--text-dim); }
+
+.feed-entry-log { opacity: 0.85; }
+.feed-log-text { color: var(--text-dim); }
+
 .feed-user { color: var(--accent); font-weight: 600; }
 .feed-bot { color: var(--green); font-weight: 600; }
 .feed-ai-detail { color: var(--text-dim); display: block; margin-top: 2px; padding-left: 62px; font-size: 12px; }
@@ -270,6 +281,29 @@ body {
   font-size: 12px;
 }
 .send-form button:hover { opacity: 0.9; }
+
+.recent-header {
+  margin-top: 12px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+.recent-messages {
+  margin-top: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+.recent-message {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  color: var(--text);
+  word-break: break-word;
+}
+.recent-message.recent-manual { color: var(--purple); }
+.recent-time { color: var(--text-dim); margin-right: 6px; font-size: 10px; }
+.recent-empty { color: var(--text-dim); font-size: 11px; font-style: italic; }
 
 .overrides-card h3 { margin: 0 0 4px; font-size: 13px; }
 .hint { font-size: 11px; color: var(--text-dim); margin: 0 0 8px; }

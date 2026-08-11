@@ -40,6 +40,20 @@ sealed class ActivityEvent {
         val mocked: Boolean,
         override val timestamp: Instant = Instant.now(),
     ) : ActivityEvent()
+
+    /**
+     * A mirror of one line of [Messaging]'s colored console output (cooldown status,
+     * eligibility failures like "excluded user"/"message too short", "no action taken",
+     * etc.) - the same diagnostics visible in the IDE console, surfaced in the GUI too.
+     * [level] is a loose category (error/warn/success/callout/highlight/info/message) taken
+     * from whichever color started the line, for basic visual grouping - not a strict enum,
+     * since one printed line can mix several colors internally.
+     */
+    data class Log(
+        val level: String,
+        val text: String,
+        override val timestamp: Instant = Instant.now(),
+    ) : ActivityEvent()
 }
 
 /**
@@ -51,8 +65,12 @@ sealed class ActivityEvent {
  * [publish] is safe to call from a synchronous, non-coroutine call site (Twitch4J's event
  * dispatch thread) - [MutableSharedFlow.tryEmit] never suspends, and with a buffer this
  * size it never fails either, so publishing an event never blocks bot logic.
+ *
+ * The default replay size is generous because [ActivityEvent.Log] lines are frequent
+ * (printed on every dispatch, per bot) - a small buffer would let them crowd out older
+ * [ActivityEvent.Incoming]/[ActivityEvent.Outgoing] history.
  */
-class ActivityBus(replaySize: Int = 200) {
+class ActivityBus(replaySize: Int = 500) {
     private val flow = MutableSharedFlow<ActivityEvent>(
         replay = replaySize,
         extraBufferCapacity = 64,

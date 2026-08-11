@@ -67,6 +67,7 @@ data class ActivityEventDto(
     val prompt: String? = null,
     val response: String? = null,
     val mocked: Boolean? = null,
+    val level: String? = null,
 )
 
 fun ActivityEvent.toDto(): ActivityEventDto = when (this) {
@@ -95,6 +96,13 @@ fun ActivityEvent.toDto(): ActivityEventDto = when (this) {
         prompt = prompt,
         response = response,
         mocked = mocked,
+    )
+
+    is ActivityEvent.Log -> ActivityEventDto(
+        type = "log",
+        timestampMs = timestamp.toEpochMilli(),
+        message = text,
+        level = level,
     )
 }
 

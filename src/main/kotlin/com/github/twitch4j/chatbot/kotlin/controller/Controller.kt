@@ -50,7 +50,7 @@ class Controller(private val configuration: Configuration) {
 
     private val clients: Map<String, ITwitchClient> = definitions.associate { it.key to createClient(it) }
 
-    private val activityBus = ActivityBus()
+    private val activityBus = ActivityBus().also { Messaging.bus = it }
     private val mockModeState = MockModeState()
     private val mockAiClient = MockAIClient()
 
