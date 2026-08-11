@@ -1,5 +1,7 @@
 package com.github.twitch4j.chatbot.kotlin.core
 
+import kotlin.random.Random
+
 /**
  * Production stand-in for the real Gemini-backed [AIClient], used when the GUI's mock
  * mode is on so testing never costs money or hits the network. Derives its default
@@ -7,6 +9,13 @@ package com.github.twitch4j.chatbot.kotlin.core
  * into the prompt - like a viewer's username in a hello-back prompt - survives into the
  * response, keeping downstream checks that require it (e.g. "response must contain the
  * user's name") satisfied on the first try instead of burning through retries.
+ *
+ * For the mainline transform specifically, [defaultResponse] does the same job the real
+ * transform prompt asks Gemini to do, the simplest way possible: swap one word of the
+ * original message for the bot's configured word (buttsbot's "butt", blampbot's "blamp",
+ * etc.) - both to look like a plausible transform in the GUI, and because
+ * [com.github.twitch4j.chatbot.kotlin.core.engine.TransformedMessage] requires the response
+ * to actually contain that word, which a generic mock response almost never does.
  *
  * [overrides] lets the GUI script specific scenarios: any prompt containing a given
  * keyword (case-insensitive) returns that canned response instead of the default.
@@ -48,8 +57,32 @@ class MockAIClient(private val maxLogSize: Int = 200) : AIClient {
     /**
      * Every prompt built by [com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI] leads
      * with bot-specific instructions and trails with the actual subject matter (a quoted
-     * string, a request, a filled-in username) - so a tail slice keeps the response short
-     * and relevant without needing to parse prompt structure.
+     * string, a request, a filled-in username). For transform/request prompts specifically,
+     * that subject matter is quoted at the very end - when that shape is present alongside
+     * [GenericAI]'s fixed preamble (which always names the configured word, e.g. "don't
+     * repeat BUTT over and over"), swap one word of it for that word instead of falling back
+     * to a plain tail slice.
      */
-    private fun defaultResponse(prompt: String): String = "[MOCK] " + prompt.takeLast(120).trim()
+    private fun defaultResponse(prompt: String): String {
+        val quoted = trailingQuotedPattern.find(prompt)?.groupValues?.get(1)
+        val word = transformWordPattern.find(prompt)?.groupValues?.get(1)?.lowercase()
+
+        if (!quoted.isNullOrBlank() && !word.isNullOrBlank()) {
+            return substituteWord(quoted, word)
+        }
+
+        return "[MOCK] " + prompt.takeLast(120).trim()
+    }
+
+    private fun substituteWord(original: String, word: String): String {
+        val tokens = original.trim().split(" ").toMutableList()
+        if (tokens.isEmpty()) return word
+        tokens[Random.nextInt(tokens.size)] = word
+        return tokens.joinToString(" ")
+    }
+
+    companion object {
+        private val transformWordPattern = Regex("don't repeat (\\S+) over and over")
+        private val trailingQuotedPattern = Regex("\"([^\"]*)\"\\s*$")
+    }
 }

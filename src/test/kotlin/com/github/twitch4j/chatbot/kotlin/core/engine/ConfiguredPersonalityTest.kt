@@ -9,6 +9,7 @@ import com.github.twitch4j.chatbot.kotlin.core.FeatureConfig
 import com.github.twitch4j.chatbot.kotlin.core.HelloTrigger
 import com.github.twitch4j.chatbot.kotlin.core.MessageLengthConfig
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
+import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
 import com.github.twitch4j.chatbot.kotlin.core.testBotDefinition
@@ -196,6 +197,22 @@ class ConfiguredPersonalityTest {
         p.actMainline(eventFrom("just a normal chat message here"))
 
         verify { chat.sendMessage("testchannel", "this got TESTWORDED nicely") }
+    }
+
+    @Test
+    fun `actMainline sends a message via MockAIClient's real word-swap default, with no override configured`() {
+        // This is the actual "mock mode" path the GUI uses - no FakeAIClient stand-in, no
+        // manually scripted response. If this doesn't send, mock mode won't show anything.
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(triggerKeywords = listOf("buttsbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(MockAIClient()),
+        )
+
+        p.actMainline(eventFrom("just a normal chat message here"))
+
+        verify { chat.sendMessage("testchannel", match { it.contains("testword", ignoreCase = true) }) }
     }
 
     @Test

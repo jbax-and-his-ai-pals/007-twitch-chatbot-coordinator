@@ -91,4 +91,63 @@ class MockAIClientTest {
         client.clearOverride("a")
         assertEquals(mapOf("b" to "2"), client.overridesSnapshot())
     }
+
+    // ---- Transform-shaped prompts: swap one word for the bot's configured word ---------
+
+    private fun transformPrompt(originalMessage: String, word: String = "BUTT") =
+        "you are buttsbot; when, you respond, do NOT return a string with all caps; this is a big no-no; " +
+            "don't repeat $word over and over in sequence; don't repeat yourself at the end of your response; " +
+            "go get 'em, ace! here are your instructions: replace a word with \"butt\"; here's the string: \"$originalMessage\""
+
+    @Test
+    fun `a transform-shaped prompt gets one word swapped for the configured word, lowercased`() {
+        val client = MockAIClient()
+
+        val response = client.generateContent(transformPrompt("this is a totally normal chat message"))
+
+        assertTrue(response.contains("butt"), "expected the configured word to appear, was: $response")
+        assertTrue(!response.contains("BUTT"), "expected the lowercase form, was: $response")
+    }
+
+    @Test
+    fun `the transform response keeps every other word from the original message`() {
+        val client = MockAIClient()
+        val original = "this is a totally normal chat message"
+
+        val response = client.generateContent(transformPrompt(original))
+
+        val originalWords = original.split(" ")
+        val responseWords = response.split(" ")
+        assertEquals(originalWords.size, responseWords.size)
+        assertEquals(1, originalWords.indices.count { originalWords[it] != responseWords[it] })
+    }
+
+    @Test
+    fun `a different bot's configured word is picked up the same way`() {
+        val client = MockAIClient()
+
+        val response = client.generateContent(transformPrompt("some other message here", word = "BLAMP"))
+
+        assertTrue(response.contains("blamp"), "expected blampbot's word, was: $response")
+    }
+
+    @Test
+    fun `a prompt without a trailing quoted string falls back to the tail-slice default`() {
+        val client = MockAIClient()
+
+        // Has the "don't repeat X" preamble but no quoted subject matter, like a wisdom prompt.
+        val response = client.generateContent("don't repeat BUTT over and over in sequence; give me a witticism")
+
+        assertTrue(response.startsWith("[MOCK]"), "expected the generic fallback, was: $response")
+    }
+
+    @Test
+    fun `an override still wins over the transform word-swap`() {
+        val client = MockAIClient()
+        client.setOverride("totally normal", "a canned transform result")
+
+        val response = client.generateContent(transformPrompt("this is a totally normal chat message"))
+
+        assertEquals("a canned transform result", response)
+    }
 }
