@@ -414,10 +414,16 @@ function cooldownBarHtml(botKey, type, status) {
 
 function renderBotCard(bot) {
   const card = document.createElement("div");
-  card.className = "bot-card";
+  card.className = "bot-card" + (bot.enabled ? "" : " bot-disabled");
   card.dataset.botKey = bot.key;
   card.innerHTML = `
-    <h3 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> ${escapeHtml(bot.key)}</h3>
+    <div class="bot-card-header">
+      <h3 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> ${escapeHtml(bot.key)}</h3>
+      <label class="switch bot-enable-switch" title="Enable/disable auto-responses">
+        <input type="checkbox" class="bot-enable-toggle" ${bot.enabled ? "checked" : ""} />
+        <span class="slider"></span>
+      </label>
+    </div>
     <div class="card-body">
       <div class="bot-meta">${escapeHtml(bot.accountUsername)} &middot; mood: ${escapeHtml(bot.activeMood)} &middot; ${escapeHtml(bot.channel)}</div>
       <div class="cooldowns"></div>
@@ -434,6 +440,11 @@ function renderBotCard(bot) {
       <div class="config-panel" style="display:none"></div>
     </div>
   `;
+
+  card.querySelector(".bot-enable-toggle").addEventListener("change", async (e) => {
+    await api(`/bots/${encodeURIComponent(bot.key)}/enabled`, { method: "POST", body: JSON.stringify({ enabled: e.target.checked }) });
+    card.classList.toggle("bot-disabled", !e.target.checked);
+  });
 
   card.querySelector("form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -1026,6 +1037,18 @@ async function refreshCooldowns() {
     }
   }
 }
+
+document.getElementById("expireAllBtn").addEventListener("click", async () => {
+  await api("/cooldowns/expire-all", { method: "POST" });
+  await refreshCooldowns();
+});
+
+document.getElementById("fastForwardBtn").addEventListener("click", async () => {
+  const minutes = Number(document.getElementById("fastForwardMinutes").value);
+  if (!Number.isFinite(minutes) || minutes <= 0) return;
+  await api("/cooldowns/fast-forward", { method: "POST", body: JSON.stringify({ ms: Math.round(minutes * 60000) }) });
+  await refreshCooldowns();
+});
 
 async function loadBots() {
   bots = await api("/bots");

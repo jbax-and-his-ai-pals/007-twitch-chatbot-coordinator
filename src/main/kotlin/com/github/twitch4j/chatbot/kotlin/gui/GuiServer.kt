@@ -98,6 +98,16 @@ fun Application.guiModule(admin: AdminController) {
                 call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.NotFound)
             }
 
+            post("/cooldowns/expire-all") {
+                admin.expireAllCooldowns()
+                call.respond(HttpStatusCode.OK)
+            }
+
+            post("/cooldowns/fast-forward") {
+                val body = call.receive<FastForwardDto>()
+                respondOk(admin.fastForwardAllCooldowns(body.ms))
+            }
+
             post("/send") {
                 val body = call.receive<SendRequestDto>()
                 val ok = admin.sendAsBot(body.botKey, body.message)
@@ -146,6 +156,12 @@ fun Application.guiModule(admin: AdminController) {
                     val botKey = call.parameters["botKey"]!!
                     val config = admin.botConfig(botKey)
                     if (config == null) call.respond(HttpStatusCode.NotFound) else call.respond(config.toDto())
+                }
+
+                post("/enabled") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<BotEnabledDto>()
+                    respondOk(admin.setBotEnabled(botKey, body.enabled))
                 }
 
                 post("/excluded-users") {

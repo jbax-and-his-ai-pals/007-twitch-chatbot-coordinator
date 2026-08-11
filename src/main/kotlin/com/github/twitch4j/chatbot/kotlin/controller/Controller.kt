@@ -105,7 +105,7 @@ class Controller(private val configuration: Configuration) {
     private fun dispatch(event: ChannelMessageEvent) {
         Messaging.message("${event.channel.name} - ${event.user.name} - \"${event.message}\"")
         activityBus.publish(ActivityEvent.Incoming(channel = event.channel.name, user = event.user.name, message = event.message))
-        MessageDispatcher.dispatch(personalities, event, Scheduler::pickActor)
+        MessageDispatcher.dispatch(admin.enabledPersonalities(), event, Scheduler::pickActor)
     }
 
     private fun createClient(bot: BotDefinition): ITwitchClient {

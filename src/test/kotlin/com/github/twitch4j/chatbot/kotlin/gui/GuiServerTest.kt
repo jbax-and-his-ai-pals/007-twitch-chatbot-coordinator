@@ -5,6 +5,8 @@ import com.github.twitch4j.chat.ITwitchChat
 import com.github.twitch4j.chatbot.kotlin.controller.AdminController
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
+import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
+import com.github.twitch4j.chatbot.kotlin.core.CooldownType
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.MoodConfig
@@ -30,6 +32,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -99,6 +102,62 @@ class GuiServerTest {
 
         val snapshot = json.decodeFromString<CooldownSnapshotDto>(client.get("/api/cooldowns/blampbot").bodyAsText())
         assertTrue(snapshot.mainline.ready)
+    }
+
+    @Test
+    fun `POST api cooldowns expire-all makes every bot's mainline snapshot ready`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val response = client.post("/api/cooldowns/expire-all")
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        val snapshot = json.decodeFromString<CooldownSnapshotDto>(client.get("/api/cooldowns/blampbot").bodyAsText())
+        assertTrue(snapshot.mainline.ready)
+    }
+
+    @Test
+    fun `POST api cooldowns fast-forward shortens the remaining time, rejects a non-positive amount`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        admin.cooldownAdmin("blampbot", CooldownType.WISDOM, CooldownAdminAction.SetRemaining(30_000L))
+
+        val response = client.post("/api/cooldowns/fast-forward") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(FastForwardDto.serializer(), FastForwardDto(10_000L)))
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+
+        val snapshot = json.decodeFromString<CooldownSnapshotDto>(client.get("/api/cooldowns/blampbot").bodyAsText())
+        assertTrue(snapshot.wisdom.remainingMs in 19_000..20_000, "expected ~20000ms remaining, got ${snapshot.wisdom.remainingMs}")
+
+        val rejected = client.post("/api/cooldowns/fast-forward") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(FastForwardDto.serializer(), FastForwardDto(0)))
+        }
+        assertEquals(HttpStatusCode.NotFound, rejected.status)
+    }
+
+    @Test
+    fun `POST api bots botKey enabled toggles listBots' enabled flag, 404 for an unknown bot`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val disableResponse = client.post("/api/bots/blampbot/enabled") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(BotEnabledDto.serializer(), BotEnabledDto(false)))
+        }
+        assertEquals(HttpStatusCode.OK, disableResponse.status)
+
+        val bots = json.decodeFromString<List<BotStatusDto>>(client.get("/api/bots").bodyAsText())
+        assertFalse(bots.single().enabled)
+
+        val unknownResponse = client.post("/api/bots/does-not-exist/enabled") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(BotEnabledDto.serializer(), BotEnabledDto(true)))
+        }
+        assertEquals(HttpStatusCode.NotFound, unknownResponse.status)
     }
 
     @Test

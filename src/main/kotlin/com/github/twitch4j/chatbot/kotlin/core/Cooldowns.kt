@@ -34,6 +34,9 @@ sealed class CooldownAdminAction {
 
     /** Make the cooldown read as having exactly this much time left, regardless of its configured interval. */
     data class SetRemaining(val remainingMs: Long) : CooldownAdminAction()
+
+    /** Shift the timer's clock back by this much, shortening whatever remains by the same amount (never past ready). */
+    data class AdvanceBy(val ms: Long) : CooldownAdminAction()
 }
 
 /**
@@ -215,6 +218,7 @@ class Cooldowns(
         val newLastTime = when (action) {
             is CooldownAdminAction.Expire -> Instant.now().minusMillis(interval)
             is CooldownAdminAction.SetRemaining -> Instant.now().minusMillis(interval - action.remainingMs)
+            is CooldownAdminAction.AdvanceBy -> lastTimeFor(type).minusMillis(action.ms)
         }
         applyLastTime(type, newLastTime)
     }
@@ -225,6 +229,14 @@ class Cooldowns(
         CooldownType.CALLOUT -> calloutCooldownMs
         CooldownType.RETRY -> retryCooldownMs
         CooldownType.REQUEST -> requestCooldownMs
+    }
+
+    private fun lastTimeFor(type: CooldownType): Instant = when (type) {
+        CooldownType.MAINLINE -> lastMainlineTime
+        CooldownType.WISDOM -> lastWisdomTime
+        CooldownType.CALLOUT -> lastCalloutTime
+        CooldownType.RETRY -> lastRetryTime
+        CooldownType.REQUEST -> lastRequestTime
     }
 
     private fun applyLastTime(type: CooldownType, instant: Instant) {

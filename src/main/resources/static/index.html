@@ -62,6 +62,14 @@
       </div>
 
       <h2>Bots</h2>
+      <div class="global-cooldown-controls">
+        <button type="button" id="expireAllBtn">Expire all cooldowns</button>
+        <div class="fast-forward-group">
+          <input type="number" id="fastForwardMinutes" value="5" min="1" title="minutes" />
+          <span class="fast-forward-label">min</span>
+          <button type="button" id="fastForwardBtn">Fast forward</button>
+        </div>
+      </div>
       <div id="botCards"></div>
 
       <div class="overrides-card">

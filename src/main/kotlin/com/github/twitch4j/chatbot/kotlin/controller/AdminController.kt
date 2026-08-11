@@ -30,6 +30,7 @@ data class BotStatus(
     val triggerKeywords: List<String>,
     val channel: String,
     val activeMood: String,
+    val enabled: Boolean,
 )
 
 /** One hello-trigger, as structured data the GUI can populate a match-type dropdown + text box(es) from. */
@@ -117,6 +118,7 @@ class AdminController(
     private val commonConfig: CommonConfig,
 ) {
     private val personalityByKey = personalities.associateBy { it.name }
+    private val disabledBots = mutableSetOf<String>()
 
     fun listBots(): List<BotStatus> = personalities.map {
         BotStatus(
@@ -125,8 +127,26 @@ class AdminController(
             triggerKeywords = it.definition.triggerKeywords,
             channel = it.channel,
             activeMood = it.definition.activeMood.name,
+            enabled = isBotEnabled(it.name),
         )
     }
+
+    fun isBotEnabled(botKey: String): Boolean = botKey !in disabledBots
+
+    /**
+     * A disabled bot never auto-responds (see [enabledPersonalities], used by both real
+     * dispatch and [simulateMessage]) but can still be driven manually via [sendAsBot] -
+     * matches how an excluded user already doesn't block a manual send either.
+     */
+    fun setBotEnabled(botKey: String, enabled: Boolean): Boolean {
+        if (botKey !in personalityByKey) return false
+        if (enabled) disabledBots.remove(botKey) else disabledBots.add(botKey)
+        logConfigChange(botKey, "enabled set: $enabled")
+        return true
+    }
+
+    /** [personalities] filtered down to the ones currently enabled - what real dispatch and [simulateMessage] should offer to [MessageDispatcher]. */
+    fun enabledPersonalities(): List<Personality> = personalities.filter { isBotEnabled(it.name) }
 
     fun cooldownSnapshot(botKey: String): CooldownSnapshot? = personalityByKey[botKey]?.cooldownSnapshot()
 
@@ -134,6 +154,24 @@ class AdminController(
     fun cooldownAdmin(botKey: String, type: CooldownType, action: CooldownAdminAction): Boolean {
         val personality = personalityByKey[botKey] ?: return false
         personality.adminCooldown(type, action)
+        return true
+    }
+
+    /** Expires every cooldown timer on every bot at once - a global "everyone's ready now" button. */
+    fun expireAllCooldowns() {
+        personalities.forEach { personality ->
+            CooldownType.entries.forEach { type -> personality.adminCooldown(type, CooldownAdminAction.Expire) }
+        }
+        Messaging.info("ALL cooldowns expired for every bot")
+    }
+
+    /** Shifts every cooldown timer on every bot back by [ms] at once, e.g. to test "almost ready" states without fully resetting. */
+    fun fastForwardAllCooldowns(ms: Long): Boolean {
+        if (ms <= 0) return false
+        personalities.forEach { personality ->
+            CooldownType.entries.forEach { type -> personality.adminCooldown(type, CooldownAdminAction.AdvanceBy(ms)) }
+        }
+        Messaging.info("ALL cooldowns fast-forwarded by ${ms}ms for every bot")
         return true
     }
 
@@ -178,7 +216,7 @@ class AdminController(
         activityBus.publish(ActivityEvent.Incoming(channel = resolvedChannel, user = user, message = message, simulated = true))
 
         val event = buildSimulatedEvent(resolvedChannel, user, message)
-        MessageDispatcher.dispatch(personalities, event, Scheduler::pickActor)
+        MessageDispatcher.dispatch(enabledPersonalities(), event, Scheduler::pickActor)
         return true
     }
 

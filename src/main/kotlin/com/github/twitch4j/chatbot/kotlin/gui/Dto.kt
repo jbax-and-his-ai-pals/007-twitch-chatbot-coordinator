@@ -26,6 +26,7 @@ data class BotStatusDto(
     val triggerKeywords: List<String>,
     val channel: String,
     val activeMood: String,
+    val enabled: Boolean,
 )
 
 fun BotStatus.toDto() = BotStatusDto(
@@ -34,6 +35,7 @@ fun BotStatus.toDto() = BotStatusDto(
     triggerKeywords = triggerKeywords,
     channel = channel,
     activeMood = activeMood,
+    enabled = enabled,
 )
 
 @Serializable
@@ -204,6 +206,12 @@ data class WordDto(val word: String)
 
 @Serializable
 data class WeightDto(val weight: Int)
+
+@Serializable
+data class BotEnabledDto(val enabled: Boolean)
+
+@Serializable
+data class FastForwardDto(val ms: Long)
 
 @Serializable
 data class UserDto(val user: String)

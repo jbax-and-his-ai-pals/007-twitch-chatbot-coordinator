@@ -111,6 +111,80 @@ class AdminControllerTest {
         assertEquals(listOf("blampbot"), blampbot.triggerKeywords)
         assertEquals("testchannel", blampbot.channel)
         assertEquals("default", blampbot.activeMood)
+        assertTrue(blampbot.enabled)
+    }
+
+    @Test
+    fun `setBotEnabled round-trips and returns false for an unknown bot`() {
+        assertTrue(admin.isBotEnabled("blampbot"))
+
+        assertTrue(admin.setBotEnabled("blampbot", false))
+        assertFalse(admin.isBotEnabled("blampbot"))
+        assertFalse(admin.listBots().single { it.key == "blampbot" }.enabled)
+
+        assertTrue(admin.setBotEnabled("blampbot", true))
+        assertTrue(admin.isBotEnabled("blampbot"))
+
+        assertFalse(admin.setBotEnabled("does-not-exist", false))
+    }
+
+    @Test
+    fun `a disabled bot does not respond to simulateMessage, but an enabled one still does`() {
+        admin.setBotEnabled("blampbot", false)
+        admin.setMockOverride("", "this got TESTWORDED nicely")
+        // Isolate to blampbot only - exclude the user from buttsbot too so the coordinator
+        // has nothing else to pick from.
+        admin.addExcludedUser("buttsbot", "newuser")
+
+        admin.simulateMessage(user = "newuser", message = "just a normal chat message here")
+
+        assertTrue(admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>().none { it.botKey == "blampbot" })
+
+        admin.setBotEnabled("blampbot", true)
+        admin.simulateMessage(user = "newuser", message = "another normal chat message right here")
+
+        assertTrue(admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>().any { it.botKey == "blampbot" })
+    }
+
+    @Test
+    fun `a disabled bot can still be driven manually via sendAsBot`() {
+        admin.setBotEnabled("blampbot", false)
+
+        val ok = admin.sendAsBot("blampbot", "manual message while disabled")
+
+        assertTrue(ok)
+        verify { chatA.sendMessage("testchannel", "manual message while disabled") }
+    }
+
+    @Test
+    fun `expireAllCooldowns makes every bot's every timer ready at once`() {
+        admin.cooldownAdmin("blampbot", CooldownType.WISDOM, CooldownAdminAction.SetRemaining(30_000L))
+        admin.cooldownAdmin("buttsbot", CooldownType.CALLOUT, CooldownAdminAction.SetRemaining(30_000L))
+
+        admin.expireAllCooldowns()
+
+        val blampbot = admin.cooldownSnapshot("blampbot")!!
+        val buttsbot = admin.cooldownSnapshot("buttsbot")!!
+        assertTrue(blampbot.wisdom.ready)
+        assertTrue(blampbot.mainline.ready)
+        assertTrue(buttsbot.callout.ready)
+        assertTrue(buttsbot.mainline.ready)
+    }
+
+    @Test
+    fun `fastForwardAllCooldowns shortens every bot's every timer by the given amount`() {
+        admin.cooldownAdmin("blampbot", CooldownType.WISDOM, CooldownAdminAction.SetRemaining(30_000L))
+
+        assertTrue(admin.fastForwardAllCooldowns(10_000L))
+
+        val remaining = admin.cooldownSnapshot("blampbot")!!.wisdom.remainingMs
+        assertTrue(remaining in 19_000..20_000, "expected ~20000ms remaining after a 10000ms fast-forward from 30000ms, was $remaining")
+    }
+
+    @Test
+    fun `fastForwardAllCooldowns rejects a non-positive amount`() {
+        assertFalse(admin.fastForwardAllCooldowns(0))
+        assertFalse(admin.fastForwardAllCooldowns(-5))
     }
 
     @Test

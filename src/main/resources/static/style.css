@@ -345,6 +345,42 @@ body {
 .bot-card h3 { margin: 0 0 2px; font-size: 15px; }
 .bot-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
 
+.bot-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bot-card-header h3 { flex: 1; min-width: 0; }
+.bot-enable-switch { flex: 0 0 auto; }
+.bot-enable-switch input:checked + .slider { background: var(--green); }
+.bot-card.bot-disabled { opacity: 0.55; }
+
+.global-cooldown-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.global-cooldown-controls button {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.global-cooldown-controls button:hover { border-color: var(--accent); color: var(--accent); }
+.fast-forward-group { display: flex; align-items: center; gap: 4px; }
+.fast-forward-group input {
+  width: 50px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 6px;
+  font-size: 12px;
+}
+.fast-forward-label { font-size: 11px; color: var(--text-dim); }
+
 .collapsible-header {
   cursor: pointer;
   display: flex;
