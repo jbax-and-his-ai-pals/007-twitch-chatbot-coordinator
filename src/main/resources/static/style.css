@@ -232,6 +232,34 @@ body {
 .bot-card h3 { margin: 0 0 2px; font-size: 15px; }
 .bot-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
 
+.collapsible-header {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+.collapsible-header:hover { color: var(--accent); }
+.chevron {
+  display: inline-block;
+  font-size: 9px;
+  color: var(--text-dim);
+  transition: transform 0.15s ease;
+}
+.collapsible-header:hover .chevron { color: var(--accent); }
+.card-body {
+  margin-top: 10px;
+  overflow: hidden;
+}
+.bot-card.collapsed .chevron,
+.overrides-card.collapsed .chevron {
+  transform: rotate(-90deg);
+}
+.bot-card.collapsed .card-body,
+.overrides-card.collapsed .card-body {
+  display: none;
+}
+
 .cooldown-row {
   display: flex;
   align-items: center;

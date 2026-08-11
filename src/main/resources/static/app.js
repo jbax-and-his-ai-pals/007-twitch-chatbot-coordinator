@@ -242,17 +242,19 @@ function renderBotCard(bot) {
   card.className = "bot-card";
   card.dataset.botKey = bot.key;
   card.innerHTML = `
-    <h3>${escapeHtml(bot.key)}</h3>
-    <div class="bot-meta">${escapeHtml(bot.accountUsername)} &middot; mood: ${escapeHtml(bot.activeMood)} &middot; ${escapeHtml(bot.channel)}</div>
-    <div class="cooldowns"></div>
-    <form class="send-form">
-      <input type="text" placeholder="Send as ${escapeHtml(bot.key)}..." />
-      <button type="submit">Send</button>
-    </form>
-    <div class="recent-header">Recent messages</div>
-    <div class="recent-messages"><div class="recent-empty">no messages yet</div></div>
-    <button class="config-toggle" data-bot="${escapeHtml(bot.key)}">&#9881; Configure</button>
-    <div class="config-panel" style="display:none"></div>
+    <h3 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> ${escapeHtml(bot.key)}</h3>
+    <div class="card-body">
+      <div class="bot-meta">${escapeHtml(bot.accountUsername)} &middot; mood: ${escapeHtml(bot.activeMood)} &middot; ${escapeHtml(bot.channel)}</div>
+      <div class="cooldowns"></div>
+      <form class="send-form">
+        <input type="text" placeholder="Send as ${escapeHtml(bot.key)}..." />
+        <button type="submit">Send</button>
+      </form>
+      <div class="recent-header">Recent messages</div>
+      <div class="recent-messages"><div class="recent-empty">no messages yet</div></div>
+      <button class="config-toggle" data-bot="${escapeHtml(bot.key)}">&#9881; Configure</button>
+      <div class="config-panel" style="display:none"></div>
+    </div>
   `;
 
   card.querySelector("form").addEventListener("submit", async (e) => {
@@ -498,6 +500,11 @@ botsPanelEl.addEventListener("click", async (e) => {
   const block = target.closest(".config-block");
 
   switch (target.dataset.action) {
+    case "toggle-section": {
+      const card = target.closest(".bot-card, .overrides-card");
+      if (card) card.classList.toggle("collapsed");
+      break;
+    }
     case "edit-chip": {
       const { scope, list, field, value } = target.dataset;
       const prefix = scopedPrefix(scope, botKey);

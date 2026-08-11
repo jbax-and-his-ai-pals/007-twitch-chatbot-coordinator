@@ -44,23 +44,27 @@
 
     <aside class="bots-panel" id="botsPanel">
       <div class="overrides-card" id="commonConfigCard">
-        <h3>Common configuration</h3>
-        <p class="hint">Words and users every bot recognizes alike, on top of whatever each bot adds itself.</p>
-        <div id="commonConfigBody"></div>
+        <h3 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> Common configuration</h3>
+        <div class="card-body">
+          <p class="hint">Words and users every bot recognizes alike, on top of whatever each bot adds itself.</p>
+          <div id="commonConfigBody"></div>
+        </div>
       </div>
 
       <h2>Bots</h2>
       <div id="botCards"></div>
 
       <div class="overrides-card">
-        <h3>Mock response overrides</h3>
-        <p class="hint">Any mock prompt containing the keyword returns the response instead of the default.</p>
-        <div class="override-form">
-          <input id="overrideKeyword" placeholder="keyword" />
-          <input id="overrideResponse" placeholder="response" />
-          <button id="addOverride">Add</button>
+        <h3 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> Mock response overrides</h3>
+        <div class="card-body">
+          <p class="hint">Any mock prompt containing the keyword returns the response instead of the default.</p>
+          <div class="override-form">
+            <input id="overrideKeyword" placeholder="keyword" />
+            <input id="overrideResponse" placeholder="response" />
+            <button id="addOverride">Add</button>
+          </div>
+          <ul id="overridesList" class="overrides-list"></ul>
         </div>
-        <ul id="overridesList" class="overrides-list"></ul>
       </div>
     </aside>
   </main>
