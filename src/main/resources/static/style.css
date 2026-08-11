@@ -680,6 +680,25 @@ body {
 }
 
 .overrides-card h3 { margin: 0 0 4px; font-size: 13px; }
+
+.stats-body { display: flex; flex-direction: column; gap: 12px; }
+.stats-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 12px;
+}
+.stats-label { color: var(--text-dim); }
+.stats-value { color: var(--text); font-variant-numeric: tabular-nums; }
+.stats-range { font-size: 11px; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 8px; }
 .hint { font-size: 11px; color: var(--text-dim); margin: 0 0 8px; }
 .override-form { display: flex; gap: 6px; margin-bottom: 8px; }
 .override-form input {

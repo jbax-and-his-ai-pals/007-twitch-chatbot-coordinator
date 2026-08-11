@@ -252,11 +252,13 @@ function renderFeed() {
   const source = viewingHistory ? historyEvents : allEvents;
   source.filter(matchesFilters).forEach((evt) => feedEl.appendChild(buildFeedEntryEl(evt)));
   feedEl.scrollTop = feedEl.scrollHeight;
+  renderStats();
 }
 
 /** A freshly-arrived (WebSocket) event: always record it, but only render it live when not currently browsing history. */
 function appendLiveEvent(evt) {
   recordEvent(evt);
+  renderStats();
   if (viewingHistory) return;
   if (!matchesFilters(evt)) return;
 
@@ -273,7 +275,99 @@ document.getElementById("clearFeed").addEventListener("click", () => {
   if (viewingHistory) return;
   allEvents.length = 0;
   feedEl.innerHTML = "";
+  renderStats();
 });
+
+// ==================================================================================
+// Observability stats: a client-side summary of the current (filtered) live session
+// buffer - always computed from allEvents, independent of history-browsing mode,
+// since it's meant to reflect this session's activity, not a past day's log.
+// ==================================================================================
+
+function computeStats(events) {
+  const stats = {
+    counts: { incoming: 0, outgoing: 0, ai_call: 0, log: 0 },
+    outgoingByBot: new Map(),
+    aiMockVsReal: { mock: 0, real: 0 },
+    logByLevel: {},
+    chatterCounts: new Map(),
+    minTs: null,
+    maxTs: null,
+  };
+
+  events.forEach((evt) => {
+    stats.counts[evt.type] = (stats.counts[evt.type] || 0) + 1;
+    if (stats.minTs === null || evt.timestampMs < stats.minTs) stats.minTs = evt.timestampMs;
+    if (stats.maxTs === null || evt.timestampMs > stats.maxTs) stats.maxTs = evt.timestampMs;
+
+    if (evt.type === "outgoing") {
+      stats.outgoingByBot.set(evt.botKey, (stats.outgoingByBot.get(evt.botKey) || 0) + 1);
+    } else if (evt.type === "ai_call") {
+      if (evt.mocked) stats.aiMockVsReal.mock++;
+      else stats.aiMockVsReal.real++;
+    } else if (evt.type === "incoming") {
+      stats.chatterCounts.set(evt.user, (stats.chatterCounts.get(evt.user) || 0) + 1);
+    } else if (evt.type === "log") {
+      (evt.segments || []).forEach((seg) => {
+        stats.logByLevel[seg.level] = (stats.logByLevel[seg.level] || 0) + 1;
+      });
+    }
+  });
+
+  return stats;
+}
+
+function statRowHtml(label, value) {
+  return `<div class="stats-row"><span class="stats-label">${escapeHtml(label)}</span><span class="stats-value">${value}</span></div>`;
+}
+
+function statsSectionHtml(title, rowsHtml) {
+  return `<div class="stats-section"><div class="stats-section-title">${escapeHtml(title)}</div>${rowsHtml || `<div class="config-empty">none</div>`}</div>`;
+}
+
+function renderStats() {
+  const statsBody = document.getElementById("statsBody");
+  if (!statsBody) return;
+
+  const events = allEvents.filter(matchesFilters);
+  if (events.length === 0) {
+    statsBody.innerHTML = `<div class="config-empty">no activity yet</div>`;
+    return;
+  }
+  const stats = computeStats(events);
+
+  const countsRows = ["incoming", "outgoing", "ai_call", "log"].map((t) => statRowHtml(t, stats.counts[t] || 0)).join("");
+
+  const outgoingRows = [...stats.outgoingByBot.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([bot, count]) => statRowHtml(bot, count)).join("");
+
+  const aiRows = (stats.aiMockVsReal.mock || stats.aiMockVsReal.real)
+    ? statRowHtml("mock", stats.aiMockVsReal.mock) + statRowHtml("real", stats.aiMockVsReal.real)
+    : "";
+
+  const logRows = Object.entries(stats.logByLevel)
+    .sort((a, b) => b[1] - a[1])
+    .map(([level, count]) => statRowHtml(level, count)).join("");
+
+  const topChatters = [...stats.chatterCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([user, count]) => statRowHtml(user, count)).join("");
+
+  const range = stats.minTs === stats.maxTs
+    ? new Date(stats.minTs).toLocaleString()
+    : `${new Date(stats.minTs).toLocaleString()} &rarr; ${new Date(stats.maxTs).toLocaleString()}`;
+
+  statsBody.innerHTML = [
+    statsSectionHtml("Events by type", countsRows),
+    statsSectionHtml("Outgoing per bot", outgoingRows),
+    statsSectionHtml("AI calls: mock vs real", aiRows),
+    statsSectionHtml("Log entries by level", logRows),
+    statsSectionHtml("Top chatters (incoming)", topChatters),
+    `<div class="stats-range">${range}</div>`,
+  ].join("");
+}
 
 // ==================================================================================
 // Activity history: browse a past day's log (read-only), loaded on demand.
