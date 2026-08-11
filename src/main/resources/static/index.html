@@ -34,9 +34,29 @@
       <div class="panel-header">
         <h2>Activity</h2>
         <div class="feed-controls">
-          <label><input type="checkbox" id="showAiCalls" checked /> show AI calls</label>
-          <label><input type="checkbox" id="showDebugLog" checked /> show debug log</label>
           <button id="clearFeed">Clear</button>
+        </div>
+      </div>
+      <div class="feed-filters">
+        <div class="feed-filter-types">
+          <label><input type="checkbox" id="filterChat" checked /> chat</label>
+          <label><input type="checkbox" id="filterBot" checked /> bot replies</label>
+          <label><input type="checkbox" id="filterAi" checked /> AI calls</label>
+          <label><input type="checkbox" id="filterLog" checked /> debug log</label>
+        </div>
+        <div class="feed-filter-row">
+          <input type="text" id="filterWho" class="feed-filter-input" placeholder="filter by user or bot..." />
+          <input type="text" id="filterText" class="feed-filter-input" placeholder="filter by keyword/phrase..." />
+          <select id="filterLogLevel" class="feed-filter-select">
+            <option value="all">any log level</option>
+            <option value="error">error</option>
+            <option value="warn">warn</option>
+            <option value="success">success</option>
+            <option value="callout">callout</option>
+            <option value="highlight">highlight</option>
+            <option value="info">info</option>
+            <option value="message">message</option>
+          </select>
         </div>
       </div>
       <div id="feed" class="feed"></div>

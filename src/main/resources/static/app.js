@@ -4,12 +4,18 @@ const botsPanelEl = document.getElementById("botsPanel");
 const mockSwitch = document.getElementById("mockSwitch");
 const mockLabel = document.getElementById("mockLabel");
 const connStatus = document.getElementById("connStatus");
-const showAiCalls = document.getElementById("showAiCalls");
-const showDebugLog = document.getElementById("showDebugLog");
+const filterChat = document.getElementById("filterChat");
+const filterBot = document.getElementById("filterBot");
+const filterAi = document.getElementById("filterAi");
+const filterLog = document.getElementById("filterLog");
+const filterWho = document.getElementById("filterWho");
+const filterText = document.getElementById("filterText");
+const filterLogLevel = document.getElementById("filterLogLevel");
 const overridesListEl = document.getElementById("overridesList");
 
 const COOLDOWN_TYPES = ["mainline", "wisdom", "callout", "retry", "request"];
 const RECENT_MESSAGES_LIMIT = 8;
+const ACTIVITY_HISTORY_LIMIT = 1000;
 const LOG_TAG_CLASS = {
   error: "tag-log-error",
   warn: "tag-log-warn",
@@ -30,6 +36,7 @@ const LOG_TEXT_CLASS = {
 };
 let bots = [];
 const recentByBot = new Map();
+const allEvents = [];
 
 async function api(path, options) {
   const res = await fetch(`/api${path}`, {
@@ -142,12 +149,39 @@ function renderRecentMessages(botKey) {
     </div>`).join("");
 }
 
-function appendFeedEntry(evt) {
-  if (evt.type === "ai_call" && !showAiCalls.checked) return;
-  if (evt.type === "log" && !showDebugLog.checked) return;
-  if (evt.type === "outgoing") recordOutgoing(evt);
+/** Does `evt` match the current filter bar state? Pure - doesn't touch the DOM. */
+function matchesFilters(evt) {
+  const typeEnabled = {
+    incoming: filterChat.checked,
+    outgoing: filterBot.checked,
+    ai_call: filterAi.checked,
+    log: filterLog.checked,
+  }[evt.type];
+  if (!typeEnabled) return false;
 
-  const atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
+  const whoQuery = filterWho.value.trim().toLowerCase();
+  if (whoQuery) {
+    const who = (evt.user || evt.botKey || "").toLowerCase();
+    if (!who.includes(whoQuery)) return false;
+  }
+
+  const textQuery = filterText.value.trim().toLowerCase();
+  if (textQuery) {
+    const haystack = [evt.message, evt.prompt, evt.response, ...(evt.segments || []).map((s) => s.text)]
+      .filter(Boolean).join(" ").toLowerCase();
+    if (!haystack.includes(textQuery)) return false;
+  }
+
+  if (evt.type === "log" && filterLogLevel.value !== "all") {
+    const hasLevel = (evt.segments || []).some((s) => s.level === filterLogLevel.value);
+    if (!hasLevel) return false;
+  }
+
+  return true;
+}
+
+/** Builds the DOM node for one activity event. Pure - doesn't touch allEvents or the feed. */
+function buildFeedEntryEl(evt) {
   const row = document.createElement("div");
   row.className = "feed-entry";
 
@@ -181,12 +215,39 @@ function appendFeedEntry(evt) {
       `<span class="feed-log-text">${segmentsHtml}</span>`;
   }
 
-  feedEl.appendChild(row);
-  while (feedEl.childElementCount > 500) feedEl.removeChild(feedEl.firstChild);
+  return row;
+}
+
+/** Records an event into the retained history (independent of filters) and its side effects. */
+function recordEvent(evt) {
+  if (evt.type === "outgoing") recordOutgoing(evt);
+  allEvents.push(evt);
+  while (allEvents.length > ACTIVITY_HISTORY_LIMIT) allEvents.shift();
+}
+
+/** Fully re-renders the feed from allEvents against the current filter bar state. */
+function renderFeed() {
+  feedEl.innerHTML = "";
+  allEvents.filter(matchesFilters).forEach((evt) => feedEl.appendChild(buildFeedEntryEl(evt)));
+  feedEl.scrollTop = feedEl.scrollHeight;
+}
+
+/** A freshly-arrived (WebSocket) event: record it, and append it live if it currently matches. */
+function appendLiveEvent(evt) {
+  recordEvent(evt);
+  if (!matchesFilters(evt)) return;
+
+  const atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
+  feedEl.appendChild(buildFeedEntryEl(evt));
   if (atBottom) feedEl.scrollTop = feedEl.scrollHeight;
 }
 
+[filterChat, filterBot, filterAi, filterLog].forEach((el) => el.addEventListener("change", renderFeed));
+[filterWho, filterText].forEach((el) => el.addEventListener("input", renderFeed));
+filterLogLevel.addEventListener("change", renderFeed);
+
 document.getElementById("clearFeed").addEventListener("click", () => {
+  allEvents.length = 0;
   feedEl.innerHTML = "";
 });
 
@@ -213,7 +274,7 @@ function connectWebSocket() {
   ws.onerror = () => ws.close();
   ws.onmessage = (msg) => {
     try {
-      appendFeedEntry(JSON.parse(msg.data));
+      appendLiveEvent(JSON.parse(msg.data));
     } catch (e) {
       console.error("bad activity event", e);
     }
@@ -696,8 +757,8 @@ async function loadBots() {
 
 async function loadInitialFeed() {
   const events = await api("/activity?limit=200");
-  events.forEach(appendFeedEntry);
-  feedEl.scrollTop = feedEl.scrollHeight;
+  events.forEach(recordEvent);
+  renderFeed();
 }
 
 async function loadMockMode() {

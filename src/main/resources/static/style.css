@@ -165,6 +165,34 @@ body {
 }
 .feed-controls button:hover { color: var(--text); border-color: var(--accent); }
 
+.feed-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.feed-filter-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.feed-filter-types label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.feed-filter-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.feed-filter-input, .feed-filter-select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.feed-filter-input { flex: 1; min-width: 140px; }
+.feed-filter-input:focus, .feed-filter-select:focus { outline: none; border-color: var(--accent); }
+
 .feed {
   flex: 1;
   overflow-y: auto;
