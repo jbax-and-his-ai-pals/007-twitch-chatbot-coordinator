@@ -126,6 +126,23 @@ class GuiServerTest {
     }
 
     @Test
+    fun `POST api simulate dispatches a synthetic message and records it as simulated`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val response = client.post("/api/simulate") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(SimulateMessageDto.serializer(), SimulateMessageDto("someviewer", "hello there")))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val activity = json.decodeFromString<List<ActivityEventDto>>(client.get("/api/activity").bodyAsText())
+        val incoming = activity.last { it.type == "incoming" }
+        assertEquals("someviewer", incoming.user)
+        assertEquals(true, incoming.simulated)
+    }
+
+    @Test
     fun `mock mode toggles via GET and POST api mock`() = testApplication {
         val (admin, _) = adminWithOneBot()
         application { guiModule(admin) }

@@ -63,6 +63,7 @@ data class ActivityEventDto(
     val message: String? = null,
     val botKey: String? = null,
     val manual: Boolean? = null,
+    val simulated: Boolean? = null,
     val prompt: String? = null,
     val response: String? = null,
     val mocked: Boolean? = null,
@@ -75,6 +76,7 @@ fun ActivityEvent.toDto(): ActivityEventDto = when (this) {
         channel = channel,
         user = user,
         message = message,
+        simulated = simulated,
     )
 
     is ActivityEvent.Outgoing -> ActivityEventDto(
@@ -107,3 +109,6 @@ data class SetRemainingDto(val remainingMs: Long)
 
 @Serializable
 data class MockOverrideDto(val keyword: String, val response: String)
+
+@Serializable
+data class SimulateMessageDto(val user: String, val message: String, val channel: String? = null)

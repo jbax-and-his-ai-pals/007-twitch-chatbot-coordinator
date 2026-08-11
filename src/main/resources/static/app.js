@@ -38,8 +38,10 @@ function appendFeedEntry(evt) {
   row.className = "feed-entry";
 
   if (evt.type === "incoming") {
+    const tagClass = evt.simulated ? "tag-simulated" : "tag-incoming";
+    const tagText = evt.simulated ? "SIMULATED" : "CHAT";
     row.innerHTML = `<span class="feed-time">${timeStr(evt.timestampMs)}</span>` +
-      `<span class="feed-tag tag-incoming">CHAT</span>` +
+      `<span class="feed-tag ${tagClass}">${tagText}</span>` +
       `<span class="feed-user">${escapeHtml(evt.user)}</span>: ${escapeHtml(evt.message)}`;
   } else if (evt.type === "outgoing") {
     const tagClass = evt.manual ? "tag-manual" : "tag-outgoing";
@@ -62,6 +64,17 @@ function appendFeedEntry(evt) {
 
 document.getElementById("clearFeed").addEventListener("click", () => {
   feedEl.innerHTML = "";
+});
+
+document.getElementById("simulateForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const userInput = document.getElementById("simulateUser");
+  const messageInput = document.getElementById("simulateMessage");
+  const user = userInput.value.trim();
+  const message = messageInput.value.trim();
+  if (!user || !message) return;
+  await api("/simulate", { method: "POST", body: JSON.stringify({ user, message }) });
+  messageInput.value = "";
 });
 
 function connectWebSocket() {

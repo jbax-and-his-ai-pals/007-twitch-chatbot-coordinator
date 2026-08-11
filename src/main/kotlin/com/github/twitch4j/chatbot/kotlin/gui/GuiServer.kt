@@ -102,6 +102,12 @@ fun Application.guiModule(admin: AdminController) {
                 call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.NotFound)
             }
 
+            post("/simulate") {
+                val body = call.receive<SimulateMessageDto>()
+                val ok = admin.simulateMessage(body.user, body.message, body.channel)
+                call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.NotFound)
+            }
+
             get("/mock") {
                 call.respond(MockModeDto(admin.isMockMode()))
             }

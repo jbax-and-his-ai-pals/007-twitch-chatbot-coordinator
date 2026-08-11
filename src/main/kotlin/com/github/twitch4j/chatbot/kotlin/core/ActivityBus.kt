@@ -19,6 +19,8 @@ sealed class ActivityEvent {
         val channel: String,
         val user: String,
         val message: String,
+        /** True when typed into the GUI's "simulate incoming message" tool rather than real Twitch chat. */
+        val simulated: Boolean = false,
         override val timestamp: Instant = Instant.now(),
     ) : ActivityEvent()
 

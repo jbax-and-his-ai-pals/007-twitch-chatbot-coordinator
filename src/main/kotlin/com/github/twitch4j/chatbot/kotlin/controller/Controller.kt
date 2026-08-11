@@ -10,21 +10,20 @@ import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.Configuration
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
+import com.github.twitch4j.chatbot.kotlin.core.MessageDispatcher
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.Personality
-import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
-import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
 import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
 import com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI
 
 /**
  * Runs an arbitrary number of bot identities, defined entirely by `config.yaml`, against
- * a single shared chat pipeline: one [ProcessedEvent] is computed per message, each bot's
- * eligibility/secondary triggers are evaluated independently (unchanged from how each
- * bot behaved standalone), and the mainline transform is arbitrated by [Scheduler] so
- * bots don't act on the same message except rarely.
+ * a single shared chat pipeline via [MessageDispatcher] - each bot's eligibility/secondary
+ * triggers are evaluated independently (unchanged from how each bot behaved standalone),
+ * and the mainline transform is arbitrated by [Scheduler] so bots don't act on the same
+ * message except rarely.
  *
  * Also wires up everything the GUI control panel needs: a shared [ActivityBus] every bot
  * publishes chat/AI activity to, a shared [MockModeState] so the GUI's mock-mode switch
@@ -102,21 +101,7 @@ class Controller(private val configuration: Configuration) {
     private fun dispatch(event: ChannelMessageEvent) {
         Messaging.message("${event.channel.name} - ${event.user.name} - \"${event.message}\"")
         activityBus.publish(ActivityEvent.Incoming(channel = event.channel.name, user = event.user.name, message = event.message))
-
-        val processed = ProcessedEvent.fromEvent(event)
-        processed.printSharedStatus()
-
-        val mainlineCandidates = mutableListOf<Personality>()
-
-        personalities.forEach { personality ->
-            when (val intent = personality.determineIntent(event, processed)) {
-                is PersonalityIntent.Secondary -> intent.action()
-                is PersonalityIntent.Mainline -> mainlineCandidates.add(personality)
-                is PersonalityIntent.None -> Unit
-            }
-        }
-
-        Scheduler.pickMainlineActors(mainlineCandidates).forEach { it.actMainline(event) }
+        MessageDispatcher.dispatch(personalities, event, Scheduler::pickMainlineActors)
     }
 
     private fun createClient(bot: BotDefinition): ITwitchClient {

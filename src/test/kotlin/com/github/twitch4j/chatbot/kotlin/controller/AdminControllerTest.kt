@@ -7,6 +7,7 @@ import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.AIClient
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
+import com.github.twitch4j.chatbot.kotlin.core.HelloTrigger
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
@@ -54,7 +55,12 @@ class AdminControllerTest {
         val mockAiClient = MockAIClient()
 
         val botA = ConfiguredPersonality(
-            bot = testBotDefinition(key = "blampbot", accountUsername = "blampbot", triggerKeywords = listOf("blampbot")),
+            bot = testBotDefinition(
+                key = "blampbot",
+                accountUsername = "blampbot",
+                triggerKeywords = listOf("blampbot"),
+                helloTriggers = listOf(HelloTrigger(startsWith = "hi {ref}")),
+            ),
             client = clientA,
             channel = "testchannel",
             genericAI = GenericAI(SwitchableAIClient("blampbot", mockModeState, activityBus, mock = mockAiClient)),
@@ -180,5 +186,62 @@ class AdminControllerTest {
 
         admin.clearMockOverride("wisdom")
         assertTrue(admin.mockOverrides().isEmpty())
+    }
+
+    @Test
+    fun `simulateMessage respects a bot's excluded-user list, same as a real message would`() {
+        // testBotDefinition's default excludedUsers is {"testbot"} - reuse that instead of
+        // reconfiguring a bot, to prove simulateMessage drives the same ConfiguredPersonality
+        // eligibility logic a real Twitch message goes through, not a separate code path.
+        val ok = admin.simulateMessage(user = "testbot", message = "hello there everyone")
+
+        assertTrue(ok)
+        verify(exactly = 0) { chatA.sendMessage(any(), any()) }
+        verify(exactly = 0) { chatB.sendMessage(any(), any()) }
+
+        val event = admin.recentActivity().last() as ActivityEvent.Incoming
+        assertEquals("testbot", event.user)
+        assertTrue(event.simulated)
+    }
+
+    @Test
+    fun `simulateMessage triggers a hello-back reply that includes the simulated username`() {
+        val ok = admin.simulateMessage(user = "someviewer", message = "hi blampbot")
+
+        assertTrue(ok)
+        val outgoing = admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>()
+        assertTrue(
+            outgoing.any { it.botKey == "blampbot" && it.message.contains("someviewer", ignoreCase = true) },
+            "expected a hello-back containing the simulated username, got: $outgoing",
+        )
+    }
+
+    @Test
+    fun `simulateMessage defaults to the first bot's channel when none is specified`() {
+        admin.simulateMessage(user = "someviewer", message = "just chatting here")
+
+        val event = admin.recentActivity().filterIsInstance<ActivityEvent.Incoming>().last()
+        assertEquals("testchannel", event.channel)
+    }
+
+    @Test
+    fun `simulateMessage honors an explicit channel override`() {
+        admin.simulateMessage(user = "someviewer", message = "hello", channel = "othertestchannel")
+
+        val event = admin.recentActivity().filterIsInstance<ActivityEvent.Incoming>().last()
+        assertEquals("othertestchannel", event.channel)
+    }
+
+    @Test
+    fun `simulateMessage returns false when there are no configured bots`() {
+        val empty = AdminController(
+            personalities = emptyList(),
+            clients = emptyMap(),
+            activityBus = ActivityBus(),
+            mockModeState = MockModeState(),
+            mockAiClient = MockAIClient(),
+        )
+
+        assertFalse(empty.simulateMessage("someviewer", "hi"))
     }
 }

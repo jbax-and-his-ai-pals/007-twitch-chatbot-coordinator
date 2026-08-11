@@ -21,6 +21,16 @@
 
   <main class="layout">
     <section class="feed-panel">
+      <div class="simulate-card">
+        <h3>Simulate incoming chat message</h3>
+        <p class="hint">Runs through the real dispatch pipeline as if this user posted it - use it to test ignore lists, cooldowns, and name-in-reply behavior.</p>
+        <form id="simulateForm" class="simulate-form">
+          <input id="simulateUser" placeholder="username" required />
+          <input id="simulateMessage" placeholder="message" required />
+          <button type="submit">Simulate</button>
+        </form>
+      </div>
+
       <div class="panel-header">
         <h2>Activity</h2>
         <div class="feed-controls">

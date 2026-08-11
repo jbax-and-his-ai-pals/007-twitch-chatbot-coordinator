@@ -36,10 +36,15 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1'
 
+    // Used at runtime (not just in tests) to build a synthetic ChannelMessageEvent for the
+    // GUI's "simulate incoming message" tool - that Twitch4J type is a final class with a
+    // constructor that expects real IRC parsing internals, so a relaxed mock standing in
+    // for it is far more robust than hand-assembling one.
+    implementation 'io.mockk:mockk:1.13.13'
+
     // Tests
     testImplementation platform('org.junit:junit-bom:5.11.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
-    testImplementation 'io.mockk:mockk:1.13.13'
     testImplementation "io.ktor:ktor-server-test-host:$ktorVersion"
     testImplementation "io.ktor:ktor-client-websockets:$ktorVersion"
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1'

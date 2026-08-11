@@ -110,6 +110,39 @@ body {
   overflow: hidden;
 }
 
+.simulate-card {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.simulate-card h3 { margin: 0 0 2px; font-size: 13px; }
+.simulate-form {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.simulate-form input {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.simulate-form input#simulateUser { width: 140px; flex: none; }
+.simulate-form input#simulateMessage { flex: 1; }
+.simulate-form button {
+  background: var(--purple);
+  border: none;
+  color: #10121a;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.simulate-form button:hover { opacity: 0.9; }
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -158,6 +191,7 @@ body {
   letter-spacing: 0.03em;
 }
 .tag-incoming { background: rgba(122,138,255,0.15); color: var(--accent); }
+.tag-simulated { background: rgba(192,132,252,0.15); color: var(--purple); }
 .tag-outgoing { background: rgba(74,222,128,0.15); color: var(--green); }
 .tag-manual { background: rgba(192,132,252,0.15); color: var(--purple); }
 .tag-ai { background: rgba(34,211,238,0.15); color: var(--cyan); }
