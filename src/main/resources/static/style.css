@@ -97,7 +97,11 @@ body {
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 360px;
+  /* minmax(0, 1fr), not bare 1fr - a bare 1fr track has an implicit min-width of its
+     content's intrinsic width, so long unwrapped text (like AI prompts) would force the
+     column wider than the viewport instead of wrapping, and get silently clipped by this
+     container's overflow: hidden below. */
+  grid-template-columns: minmax(0, 1fr) 360px;
   gap: 1px;
   background: var(--border);
   overflow: hidden;
@@ -107,6 +111,7 @@ body {
   background: var(--bg);
   display: flex;
   flex-direction: column;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -270,6 +275,8 @@ body {
 
 .feed {
   flex: 1;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 8px 16px;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
@@ -281,6 +288,7 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.03);
   line-height: 1.5;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .feed-time { color: var(--text-dim); margin-right: 8px; font-size: 11px; }
@@ -319,7 +327,15 @@ body {
 
 .feed-user { color: var(--accent); font-weight: 600; }
 .feed-bot { color: var(--green); font-weight: 600; }
-.feed-ai-detail { color: var(--text-dim); display: block; margin-top: 2px; padding-left: 62px; font-size: 12px; }
+.feed-ai-detail {
+  color: var(--text-dim);
+  display: block;
+  margin-top: 2px;
+  padding-left: 62px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .bots-panel { padding: 12px 16px; overflow-y: auto; }
 .bots-panel h2 { font-size: 13px; margin: 4px 0 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
