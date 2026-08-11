@@ -24,7 +24,7 @@ data class ResolvedCooldowns(
 data class BotDefinition(
     val key: String,
     val accountUsername: String,
-    val triggerKeywords: List<String>,
+    var triggerKeywords: List<String>,
     val ignoreOtherBots: Boolean,
     val api: Map<String, String>,
     val credentials: Map<String, String>,
@@ -35,7 +35,7 @@ data class BotDefinition(
     var messageLength: MessageLengthConfig,
     var similarityThreshold: Int,
     val cooldowns: ResolvedCooldowns,
-    val helloTriggers: List<HelloTrigger>,
+    var helloTriggers: List<HelloTrigger>,
     val transform: TransformConfig,
     val moods: List<MoodConfig>,
     var activeMood: MoodConfig,

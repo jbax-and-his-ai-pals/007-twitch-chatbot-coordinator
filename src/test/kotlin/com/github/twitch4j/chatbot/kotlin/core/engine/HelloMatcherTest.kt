@@ -53,4 +53,20 @@ class HelloMatcherTest {
         )
         assertTrue(HelloMatcher.matches("hi buttsbot", triggers, refs))
     }
+
+    @Test
+    fun `ends-with matches a message ending in the phrase`() {
+        val triggers = listOf(HelloTrigger(endsWith = "hi {ref}"))
+
+        assertTrue(HelloMatcher.matches("well then, hi buttsbot", triggers, refs))
+        assertFalse(HelloMatcher.matches("hi buttsbot, well then", triggers, refs))
+    }
+
+    @Test
+    fun `ends-with combines with also-contains as AND`() {
+        val triggers = listOf(HelloTrigger(endsWith = "{ref}", alsoContains = "hey"))
+
+        assertTrue(HelloMatcher.matches("hey there, buttsbot", triggers, refs))
+        assertFalse(HelloMatcher.matches("yo buttsbot", triggers, refs))
+    }
 }

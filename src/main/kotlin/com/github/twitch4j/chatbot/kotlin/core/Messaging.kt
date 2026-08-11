@@ -7,22 +7,23 @@ object Messaging {
     var bus: ActivityBus? = null
 
     // A single console "line" (e.g. Cooldowns.printCooldownMessages) is often built from
-    // several addNewLine=false fragments in a row, each with its own color. Stdout printing
-    // is untouched by this - each fragment still prints exactly as before - but the plain
-    // text is buffered here so the *whole* line can be published as one ActivityEvent.Log
+    // several addNewLine=false fragments in a row, each with its own color - e.g. the
+    // cooldown status line mixes green "[MAINLINE]" with yellow "[WISDOM (5s)]". Stdout
+    // printing is untouched by this - each fragment still prints exactly as before - but
+    // each fragment's (level, text) is buffered as its own segment here, so the *whole*
+    // line can be published as one ActivityEvent.Log with per-segment colors preserved,
     // once a fragment with addNewLine=true (the terminator) completes it.
-    private val pendingLine = StringBuilder()
-    private var pendingLevel = "message"
+    private val pendingSegments = mutableListOf<LogSegment>()
 
     private fun emit(colorCode: String, level: String, str: String, addNewLine: Boolean) {
-        if (pendingLine.isEmpty()) pendingLevel = level
-        pendingLine.append(str)
+        pendingSegments.add(LogSegment(level, str))
 
         if (addNewLine) {
             println("$colorCode$str$commonEnding")
-            val text = pendingLine.toString()
-            pendingLine.clear()
-            if (text.isNotBlank()) bus?.publish(ActivityEvent.Log(level = pendingLevel, text = text))
+            if (pendingSegments.any { it.text.isNotBlank() }) {
+                bus?.publish(ActivityEvent.Log(segments = pendingSegments.toList()))
+            }
+            pendingSegments.clear()
         } else {
             print("$colorCode$str")
         }

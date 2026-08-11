@@ -234,7 +234,10 @@ class ConfiguredPersonalityTest {
 
             assertTrue(intent is PersonalityIntent.None)
             val logs = bus.recent().filterIsInstance<ActivityEvent.Log>()
-            assertTrue(logs.any { it.text.contains("MESSAGE TOO SHORT") }, "expected a too-short diagnostic, got: $logs")
+            assertTrue(
+                logs.any { log -> log.segments.any { it.text.contains("MESSAGE TOO SHORT") } },
+                "expected a too-short diagnostic, got: $logs",
+            )
         } finally {
             Messaging.bus = null
         }

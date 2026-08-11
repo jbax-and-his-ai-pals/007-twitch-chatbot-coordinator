@@ -30,11 +30,26 @@ data class BotStatus(
     val activeMood: String,
 )
 
+/** One hello-trigger, as structured data the GUI can populate a match-type dropdown + text box(es) from. */
+data class HelloTriggerDetail(
+    /** One of "starts_with" / "contains" / "ends_with". */
+    val matchType: String,
+    val value: String,
+    val alsoContains: String?,
+)
+
+data class PromptsDetail(
+    val voice: String,
+    val transform: String,
+    val wisdom: String,
+    val request: String,
+)
+
 /**
  * Everything about a bot's live, resolved config the GUI's config panel can show or edit.
- * `api`/`credentials` (secrets) are deliberately never included here. [helloTriggers] and
- * [features] are rendered as plain-text descriptions rather than structured data, since
- * they're read-only in the panel (see [AdminController] class doc for what's editable).
+ * `api`/`credentials` (secrets) are deliberately never included here. [features] is
+ * rendered as a plain-text description rather than structured data, since the sealed
+ * `FeatureConfig` variants remain read-only in the panel for now.
  */
 data class BotConfigDetail(
     val key: String,
@@ -51,10 +66,11 @@ data class BotConfigDetail(
     val moods: List<String>,
     val activeMood: String,
     val minimumMessagesBetween: Int,
-    val helloTriggers: List<String>,
+    val helloTriggers: List<HelloTriggerDetail>,
     val transformWords: List<String>,
     val selfQuoteMarker: String,
     val features: List<String>,
+    val prompts: PromptsDetail,
 )
 
 /**
@@ -182,20 +198,37 @@ class AdminController(
             moods = bot.moods.map { it.name },
             activeMood = bot.activeMood.name,
             minimumMessagesBetween = bot.cooldowns.mainline.minimumMessagesBetween,
-            helloTriggers = bot.helloTriggers.map(::describeHelloTrigger),
+            helloTriggers = bot.helloTriggers.map(::toHelloTriggerDetail),
             transformWords = bot.transform.words,
             selfQuoteMarker = bot.transform.selfQuoteMarker,
             features = bot.features.map(::describeFeature),
+            prompts = PromptsDetail(
+                voice = bot.prompts.voice,
+                transform = bot.prompts.transform,
+                wisdom = bot.prompts.wisdom,
+                request = bot.prompts.request,
+            ),
         )
     }
 
-    private fun describeHelloTrigger(trigger: HelloTrigger): String {
-        val parts = buildList {
-            trigger.startsWith?.let { add("starts with \"$it\"") }
-            trigger.contains?.let { add("contains \"$it\"") }
-            trigger.alsoContains?.let { add("also contains \"$it\"") }
+    private fun toHelloTriggerDetail(trigger: HelloTrigger): HelloTriggerDetail = when {
+        trigger.startsWith != null -> HelloTriggerDetail("starts_with", trigger.startsWith, trigger.alsoContains)
+        trigger.contains != null -> HelloTriggerDetail("contains", trigger.contains, trigger.alsoContains)
+        trigger.endsWith != null -> HelloTriggerDetail("ends_with", trigger.endsWith, trigger.alsoContains)
+        else -> HelloTriggerDetail("contains", "", trigger.alsoContains)
+    }
+
+    /** Builds a [HelloTrigger] from GUI input; returns null for an unrecognized [matchType] or blank [value]. */
+    private fun buildHelloTrigger(matchType: String, value: String, alsoContains: String?): HelloTrigger? {
+        val trimmedValue = value.trim()
+        if (trimmedValue.isEmpty()) return null
+        val also = alsoContains?.trim()?.takeIf { it.isNotEmpty() }
+        return when (matchType.lowercase()) {
+            "starts_with" -> HelloTrigger(startsWith = trimmedValue, alsoContains = also)
+            "contains" -> HelloTrigger(contains = trimmedValue, alsoContains = also)
+            "ends_with" -> HelloTrigger(endsWith = trimmedValue, alsoContains = also)
+            else -> null
         }
-        return parts.joinToString(" and ")
     }
 
     private fun describeFeature(feature: FeatureConfig): String = when (feature) {
@@ -310,6 +343,79 @@ class AdminController(
         personality.setMainlineIntervalBounds(minMs, maxMs)
         logConfigChange(botKey, "mainline interval bounds set: ${minMs}ms-${maxMs}ms")
         return true
+    }
+
+    /** A bot always needs at least one trigger keyword, so add/remove enforce that instead of just deferring to BotDefinition.resolve's one-time check. */
+    fun addTriggerKeyword(botKey: String, keyword: String): Boolean = editBot(botKey) { bot ->
+        val normalized = keyword.trim().lowercase()
+        if (normalized.isEmpty() || bot.triggerKeywords.contains(normalized)) return@editBot false
+        bot.triggerKeywords = bot.triggerKeywords + normalized
+        logConfigChange(botKey, "trigger keyword added: $normalized")
+        true
+    }
+
+    fun removeTriggerKeyword(botKey: String, keyword: String): Boolean = editBot(botKey) { bot ->
+        val normalized = keyword.trim().lowercase()
+        if (bot.triggerKeywords.size <= 1 || !bot.triggerKeywords.contains(normalized)) return@editBot false
+        bot.triggerKeywords = bot.triggerKeywords - normalized
+        logConfigChange(botKey, "trigger keyword removed: $normalized")
+        true
+    }
+
+    fun addTransformWord(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
+        val normalized = word.trim().lowercase()
+        if (normalized.isEmpty() || bot.transform.words.contains(normalized)) return@editBot false
+        bot.transform.words = bot.transform.words + normalized
+        logConfigChange(botKey, "transform word added: $normalized")
+        true
+    }
+
+    fun removeTransformWord(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
+        bot.transform.words = bot.transform.words - word.trim().lowercase()
+        logConfigChange(botKey, "transform word removed: $word")
+        true
+    }
+
+    fun setSelfQuoteMarker(botKey: String, value: String): Boolean = editBot(botKey) { bot ->
+        bot.transform.selfQuoteMarker = value.trim()
+        logConfigChange(botKey, "self-quote marker set: \"${value.trim()}\"")
+        true
+    }
+
+    /** [field] is one of "voice" / "transform" / "wisdom" / "request"; returns false for anything else. */
+    fun setPrompt(botKey: String, field: String, value: String): Boolean = editBot(botKey) { bot ->
+        when (field.lowercase()) {
+            "voice" -> bot.prompts.voice = value
+            "transform" -> bot.prompts.transform = value
+            "wisdom" -> bot.prompts.wisdom = value
+            "request" -> bot.prompts.request = value
+            else -> return@editBot false
+        }
+        logConfigChange(botKey, "prompts.$field updated")
+        true
+    }
+
+    fun addHelloTrigger(botKey: String, matchType: String, value: String, alsoContains: String? = null): Boolean = editBot(botKey) { bot ->
+        val trigger = buildHelloTrigger(matchType, value, alsoContains) ?: return@editBot false
+        bot.helloTriggers = bot.helloTriggers + trigger
+        logConfigChange(botKey, "hello trigger added: $matchType \"$value\"")
+        true
+    }
+
+    fun updateHelloTrigger(botKey: String, index: Int, matchType: String, value: String, alsoContains: String? = null): Boolean =
+        editBot(botKey) { bot ->
+            if (index !in bot.helloTriggers.indices) return@editBot false
+            val trigger = buildHelloTrigger(matchType, value, alsoContains) ?: return@editBot false
+            bot.helloTriggers = bot.helloTriggers.toMutableList().also { it[index] = trigger }
+            logConfigChange(botKey, "hello trigger #$index updated: $matchType \"$value\"")
+            true
+        }
+
+    fun removeHelloTrigger(botKey: String, index: Int): Boolean = editBot(botKey) { bot ->
+        if (index !in bot.helloTriggers.indices) return@editBot false
+        bot.helloTriggers = bot.helloTriggers.toMutableList().also { it.removeAt(index) }
+        logConfigChange(botKey, "hello trigger #$index removed")
+        true
     }
 
     private fun editBot(botKey: String, block: (BotDefinition) -> Boolean): Boolean {

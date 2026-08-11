@@ -44,17 +44,22 @@ sealed class ActivityEvent {
     /**
      * A mirror of one line of [Messaging]'s colored console output (cooldown status,
      * eligibility failures like "excluded user"/"message too short", "no action taken",
-     * etc.) - the same diagnostics visible in the IDE console, surfaced in the GUI too.
-     * [level] is a loose category (error/warn/success/callout/highlight/info/message) taken
-     * from whichever color started the line, for basic visual grouping - not a strict enum,
-     * since one printed line can mix several colors internally.
+     * etc.) - the same diagnostics visible in the IDE console, surfaced in the GUI too,
+     * with the same per-fragment coloring (a single line like the cooldown status often
+     * mixes several colors, e.g. green "[MAINLINE]" next to yellow "[WISDOM (5s)]").
      */
     data class Log(
-        val level: String,
-        val text: String,
+        val segments: List<LogSegment>,
         override val timestamp: Instant = Instant.now(),
     ) : ActivityEvent()
 }
+
+/**
+ * One colored fragment of a console line. [level] is a loose category (error/warn/success/
+ * callout/highlight/info/message) taken from whichever [Messaging] color produced it - not
+ * a strict enum, just enough for the GUI to pick a matching text color per fragment.
+ */
+data class LogSegment(val level: String, val text: String)
 
 /**
  * Broadcasts [ActivityEvent]s to any number of listeners (the GUI's WebSocket route being

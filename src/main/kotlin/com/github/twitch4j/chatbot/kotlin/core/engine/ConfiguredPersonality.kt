@@ -40,7 +40,10 @@ class ConfiguredPersonality(
     override val name = bot.key
     override val definition: BotDefinition get() = bot
 
-    private val referenceForms = TriggerMatcher.referenceForms(bot.triggerKeywords)
+    // A computed property (not a cached val) so a live edit to bot.triggerKeywords via the
+    // GUI's config panel takes effect on the very next message, same as every other
+    // BotDefinition field.
+    private val referenceForms: List<String> get() = TriggerMatcher.referenceForms(bot.triggerKeywords)
 
     private val cooldowns = Cooldowns(
         mainlineLabel = bot.primaryKeyword.uppercase(),

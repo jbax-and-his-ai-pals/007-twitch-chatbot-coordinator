@@ -204,8 +204,15 @@ body {
 .tag-log-info { background: rgba(34,211,238,0.15); color: var(--cyan); }
 .tag-log-message { background: rgba(154,160,176,0.15); color: var(--text-dim); }
 
-.feed-entry-log { opacity: 0.85; }
+.feed-entry-log { opacity: 0.95; }
 .feed-log-text { color: var(--text-dim); }
+.log-text-error { color: var(--red); }
+.log-text-warn { color: var(--yellow); }
+.log-text-success { color: var(--green); }
+.log-text-callout { color: var(--accent); }
+.log-text-highlight { color: var(--purple); }
+.log-text-info { color: var(--cyan); }
+.log-text-message { color: var(--text); }
 
 .feed-user { color: var(--accent); font-weight: 600; }
 .feed-bot { color: var(--green); font-weight: 600; }
@@ -333,10 +340,7 @@ body {
   color: var(--text-dim);
 }
 
-.config-readonly { font-size: 12px; color: var(--text); }
-.config-readonly div { margin-bottom: 4px; }
-.config-readonly ul { margin: 2px 0 4px; padding-left: 18px; }
-.config-readonly b { color: var(--text-dim); font-weight: 600; }
+.config-readonly-list { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text); }
 .config-empty { color: var(--text-dim); font-size: 11px; font-style: italic; }
 
 .config-mood-select {
@@ -353,24 +357,15 @@ body {
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   background: var(--panel-alt);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 2px 4px 2px 10px;
+  padding: 3px 10px;
   font-size: 11px;
   color: var(--text);
-}
-.chip button {
-  background: none;
-  border: none;
-  color: var(--text-dim);
   cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-  padding: 2px 6px;
 }
-.chip button:hover { color: var(--red); }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
 
 .config-add-form { display: flex; gap: 6px; }
 .config-add-form input {
@@ -409,23 +404,15 @@ body {
 
 .override-list-cfg { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
 .override-row-cfg {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
   font-size: 12px;
   color: var(--text);
   background: var(--panel-alt);
+  border: 1px solid transparent;
   border-radius: 4px;
   padding: 4px 8px;
-}
-.override-row-cfg button {
-  background: none;
-  border: none;
-  color: var(--red);
   cursor: pointer;
-  font-size: 13px;
 }
+.override-row-cfg:hover { border-color: var(--accent); color: var(--accent); }
 
 .overrides-card h3 { margin: 0 0 4px; font-size: 13px; }
 .hint { font-size: 11px; color: var(--text-dim); margin: 0 0 8px; }
@@ -465,3 +452,125 @@ body {
   cursor: pointer;
   font-size: 11px;
 }
+
+.editable-text {
+  font-size: 12px;
+  color: var(--text);
+  background: var(--panel-alt);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.editable-text:hover { border-color: var(--accent); color: var(--accent); }
+.editable-text-long {
+  max-height: 90px;
+  overflow-y: auto;
+  line-height: 1.4;
+}
+
+.hello-triggers-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.hello-trigger-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.hello-trigger-row select,
+.hello-trigger-row input {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.hello-trigger-row select { flex: 0 0 auto; }
+.hello-trigger-row input.hello-value,
+.hello-trigger-row input.hello-value-new { flex: 1 1 140px; min-width: 0; }
+.hello-trigger-row input.hello-also,
+.hello-trigger-row input.hello-also-new { flex: 1 1 110px; min-width: 0; }
+.hello-trigger-row button {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  cursor: pointer;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+.hello-trigger-row button:hover { border-color: var(--accent); color: var(--accent); }
+.hello-trigger-row button[data-action="remove-hello-trigger"]:hover { border-color: var(--red); color: var(--red); }
+.hello-trigger-row.hello-trigger-new button { width: auto; padding: 6px 10px; }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+.modal-box h3 { margin: 0 0 12px; font-size: 14px; }
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.modal-field input,
+.modal-field textarea {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  resize: vertical;
+}
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+.modal-actions-right { display: flex; gap: 8px; }
+.modal-actions button {
+  border-radius: 4px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text);
+}
+.modal-delete { color: var(--red); border-color: var(--border); }
+.modal-delete:hover { border-color: var(--red); }
+#editModalSave {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #10121a;
+  font-weight: 600;
+}
+#editModalSave:hover { opacity: 0.9; }

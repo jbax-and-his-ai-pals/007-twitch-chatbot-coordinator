@@ -228,6 +228,64 @@ fun Application.guiModule(admin: AdminController) {
                     val body = call.receive<MainlineIntervalDto>()
                     respondOk(admin.setMainlineIntervalBounds(botKey, body.minMs, body.maxMs))
                 }
+
+                post("/trigger-keywords") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<KeywordDto>()
+                    respondOk(admin.addTriggerKeyword(botKey, body.keyword))
+                }
+                delete("/trigger-keywords/{value}") {
+                    val botKey = call.parameters["botKey"]!!
+                    respondOk(admin.removeTriggerKeyword(botKey, call.parameters["value"]!!))
+                }
+
+                post("/transform-words") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<WordDto>()
+                    respondOk(admin.addTransformWord(botKey, body.word))
+                }
+                delete("/transform-words/{value}") {
+                    val botKey = call.parameters["botKey"]!!
+                    respondOk(admin.removeTransformWord(botKey, call.parameters["value"]!!))
+                }
+
+                post("/self-quote-marker") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<StringValueDto>()
+                    respondOk(admin.setSelfQuoteMarker(botKey, body.value))
+                }
+
+                post("/prompts/{field}") {
+                    val botKey = call.parameters["botKey"]!!
+                    val field = call.parameters["field"]!!
+                    val body = call.receive<StringValueDto>()
+                    respondOk(admin.setPrompt(botKey, field, body.value))
+                }
+
+                post("/hello-triggers") {
+                    val botKey = call.parameters["botKey"]!!
+                    val body = call.receive<HelloTriggerRequestDto>()
+                    respondOk(admin.addHelloTrigger(botKey, body.matchType, body.value, body.alsoContains))
+                }
+                post("/hello-triggers/{index}") {
+                    val botKey = call.parameters["botKey"]!!
+                    val index = call.parameters["index"]?.toIntOrNull()
+                    if (index == null) {
+                        call.respond(HttpStatusCode.BadRequest)
+                        return@post
+                    }
+                    val body = call.receive<HelloTriggerRequestDto>()
+                    respondOk(admin.updateHelloTrigger(botKey, index, body.matchType, body.value, body.alsoContains))
+                }
+                delete("/hello-triggers/{index}") {
+                    val botKey = call.parameters["botKey"]!!
+                    val index = call.parameters["index"]?.toIntOrNull()
+                    if (index == null) {
+                        call.respond(HttpStatusCode.BadRequest)
+                        return@delete
+                    }
+                    respondOk(admin.removeHelloTrigger(botKey, index))
+                }
             }
         }
 

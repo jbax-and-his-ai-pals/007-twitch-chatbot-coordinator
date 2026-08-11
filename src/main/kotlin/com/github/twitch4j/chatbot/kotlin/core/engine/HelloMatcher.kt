@@ -17,7 +17,7 @@ object HelloMatcher {
         triggers.any { trigger -> matchesOne(lowerMessage, trigger, referenceForms) }
 
     private fun matchesOne(lowerMessage: String, trigger: HelloTrigger, referenceForms: List<String>): Boolean {
-        if (trigger.startsWith == null && trigger.contains == null && trigger.alsoContains == null) {
+        if (trigger.startsWith == null && trigger.contains == null && trigger.endsWith == null && trigger.alsoContains == null) {
             return false
         }
 
@@ -28,13 +28,15 @@ object HelloMatcher {
     private fun matchesWithRef(lowerMessage: String, trigger: HelloTrigger, ref: String): Boolean {
         val startsWith = trigger.startsWith?.replace("{ref}", ref)
         val contains = trigger.contains?.replace("{ref}", ref)
+        val endsWith = trigger.endsWith?.replace("{ref}", ref)
         val alsoContains = trigger.alsoContains?.replace("{ref}", ref)
 
         return (startsWith == null || lowerMessage.startsWith(startsWith)) &&
                 (contains == null || lowerMessage.contains(contains)) &&
+                (endsWith == null || lowerMessage.endsWith(endsWith)) &&
                 (alsoContains == null || lowerMessage.contains(alsoContains))
     }
 
     private fun usesRefPlaceholder(trigger: HelloTrigger) =
-        listOf(trigger.startsWith, trigger.contains, trigger.alsoContains).any { it?.contains("{ref}") == true }
+        listOf(trigger.startsWith, trigger.contains, trigger.endsWith, trigger.alsoContains).any { it?.contains("{ref}") == true }
 }

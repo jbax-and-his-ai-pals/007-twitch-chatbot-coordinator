@@ -9,7 +9,7 @@ const overridesListEl = document.getElementById("overridesList");
 
 const COOLDOWN_TYPES = ["mainline", "wisdom", "callout", "retry", "request"];
 const RECENT_MESSAGES_LIMIT = 8;
-const LOG_LEVEL_CLASS = {
+const LOG_TAG_CLASS = {
   error: "tag-log-error",
   warn: "tag-log-warn",
   success: "tag-log-success",
@@ -17,6 +17,15 @@ const LOG_LEVEL_CLASS = {
   highlight: "tag-log-highlight",
   info: "tag-log-info",
   message: "tag-log-message",
+};
+const LOG_TEXT_CLASS = {
+  error: "log-text-error",
+  warn: "log-text-warn",
+  success: "log-text-success",
+  callout: "log-text-callout",
+  highlight: "log-text-highlight",
+  info: "log-text-info",
+  message: "log-text-message",
 };
 let bots = [];
 const recentByBot = new Map();
@@ -37,10 +46,76 @@ function timeStr(ms) {
 }
 
 function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => ({
+  return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[c]);
 }
+
+// ==================================================================================
+// Reusable edit modal - click-to-edit for single strings, word pairs, and textareas.
+// ==================================================================================
+
+const editModal = document.getElementById("editModal");
+const editModalTitle = document.getElementById("editModalTitle");
+const editModalFields = document.getElementById("editModalFields");
+const editModalDelete = document.getElementById("editModalDelete");
+const editModalCancel = document.getElementById("editModalCancel");
+const editModalSave = document.getElementById("editModalSave");
+
+function closeEditModal() {
+  editModal.style.display = "none";
+  editModalSave.onclick = null;
+  editModalDelete.onclick = null;
+}
+
+/**
+ * fields: [{ id, label?, value, type: 'text'|'textarea' }]
+ * onSave(values) - values is { [id]: string }
+ * onDelete - omit to hide the Delete button entirely
+ */
+function openEditModal({ title, fields, onSave, onDelete }) {
+  editModalTitle.textContent = title;
+  editModalFields.innerHTML = fields.map((f) => `
+    <label class="modal-field">
+      ${f.label ? `<span>${escapeHtml(f.label)}</span>` : ""}
+      ${f.type === "textarea"
+        ? `<textarea data-field-id="${f.id}" rows="6">${escapeHtml(f.value || "")}</textarea>`
+        : `<input type="text" data-field-id="${f.id}" value="${escapeHtml(f.value || "")}" />`}
+    </label>
+  `).join("");
+
+  editModalDelete.style.display = onDelete ? "inline-block" : "none";
+  editModal.style.display = "flex";
+
+  const firstField = editModalFields.querySelector("input, textarea");
+  if (firstField) firstField.focus();
+
+  editModalSave.onclick = async () => {
+    const values = {};
+    fields.forEach((f) => {
+      values[f.id] = editModalFields.querySelector(`[data-field-id="${f.id}"]`).value;
+    });
+    closeEditModal();
+    await onSave(values);
+  };
+
+  editModalDelete.onclick = async () => {
+    closeEditModal();
+    if (onDelete) await onDelete();
+  };
+}
+
+editModalCancel.addEventListener("click", closeEditModal);
+editModal.addEventListener("click", (e) => {
+  if (e.target === editModal) closeEditModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && editModal.style.display !== "none") closeEditModal();
+});
+
+// ==================================================================================
+// Activity feed
+// ==================================================================================
 
 function recordOutgoing(evt) {
   const list = recentByBot.get(evt.botKey) || [];
@@ -94,11 +169,15 @@ function appendFeedEntry(evt) {
       `<span class="feed-ai-detail">prompt: ${escapeHtml(evt.prompt.slice(0, 200))}</span>` +
       `<span class="feed-ai-detail">reply: ${escapeHtml(evt.response)}</span>`;
   } else if (evt.type === "log") {
-    const cls = LOG_LEVEL_CLASS[evt.level] || "tag-log-message";
+    const segments = evt.segments || [];
+    const tagLevel = (segments[0] && segments[0].level) || "message";
     row.classList.add("feed-entry-log");
+    const segmentsHtml = segments
+      .map((seg) => `<span class="${LOG_TEXT_CLASS[seg.level] || "log-text-message"}">${escapeHtml(seg.text)}</span>`)
+      .join("");
     row.innerHTML = `<span class="feed-time">${timeStr(evt.timestampMs)}</span>` +
-      `<span class="feed-tag ${cls}">LOG</span>` +
-      `<span class="feed-log-text">${escapeHtml(evt.message)}</span>`;
+      `<span class="feed-tag ${LOG_TAG_CLASS[tagLevel] || "tag-log-message"}">LOG</span>` +
+      `<span class="feed-log-text">${segmentsHtml}</span>`;
   }
 
   feedEl.appendChild(row);
@@ -139,6 +218,10 @@ function connectWebSocket() {
     }
   };
 }
+
+// ==================================================================================
+// Bot cards: cooldown bars, send-as, recent messages
+// ==================================================================================
 
 function cooldownBarHtml(botKey, type, status) {
   // The snapshot only reports remaining time, not the configured interval, so the bar
@@ -190,20 +273,15 @@ function renderBotCard(bot) {
   return card;
 }
 
-// ---- Config panel: read-only display + editable lists/numbers/mood ----------------
+// ==================================================================================
+// Config panel
+// ==================================================================================
+
+const MATCH_TYPE_LABELS = { starts_with: "starts with", contains: "contains", ends_with: "ends with" };
 
 function configSectionHtml(botKey, config, cooldowns) {
   return `
-    <div class="config-block">
-      <h4>Identity</h4>
-      <div class="config-readonly">
-        <div><b>Trigger keywords:</b> ${config.triggerKeywords.map(escapeHtml).join(", ")}</div>
-        <div><b>Transform words:</b> ${config.transformWords.map(escapeHtml).join(", ") || "(none)"}</div>
-        <div><b>Self-quote marker:</b> ${escapeHtml(config.selfQuoteMarker || "(none)")}</div>
-        ${config.helloTriggers.length ? `<div><b>Hello triggers:</b><ul>${config.helloTriggers.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul></div>` : ""}
-        ${config.features.length ? `<div><b>Features:</b><ul>${config.features.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul></div>` : ""}
-      </div>
-    </div>
+    ${chipListBlockHtml(botKey, "Trigger keywords", "trigger-keywords", "keyword", config.triggerKeywords)}
 
     <div class="config-block">
       <h4>Active mood</h4>
@@ -212,10 +290,19 @@ function configSectionHtml(botKey, config, cooldowns) {
       </select>
     </div>
 
+    ${helloTriggersBlockHtml(botKey, config.helloTriggers)}
+
     ${chipListBlockHtml(botKey, "Excluded users", "excluded-users", "user", config.excludedUsers)}
     ${chipListBlockHtml(botKey, "Callout words", "callout-words", "word", config.calloutWords)}
     ${chipListBlockHtml(botKey, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
     ${overrideListBlockHtml(botKey, config.calloutResponseOverrides)}
+    ${chipListBlockHtml(botKey, "Transform words", "transform-words", "word", config.transformWords)}
+
+    ${editableTextBlockHtml(botKey, "Self-quote marker", "/self-quote-marker", config.selfQuoteMarker)}
+    ${editableTextBlockHtml(botKey, "Prompt: voice", "/prompts/voice", config.prompts.voice, true)}
+    ${editableTextBlockHtml(botKey, "Prompt: transform", "/prompts/transform", config.prompts.transform, true)}
+    ${editableTextBlockHtml(botKey, "Prompt: wisdom", "/prompts/wisdom", config.prompts.wisdom, true)}
+    ${editableTextBlockHtml(botKey, "Prompt: request", "/prompts/request", config.prompts.request, true)}
 
     <div class="config-block">
       <h4>Message length</h4>
@@ -261,12 +348,19 @@ function configSectionHtml(botKey, config, cooldowns) {
         <button data-action="save-mainline-interval" data-bot="${escapeHtml(botKey)}">Save</button>
       </div>
     </div>
+
+    ${config.features.length ? `
+    <div class="config-block">
+      <h4>Features (read-only)</h4>
+      <ul class="config-readonly-list">${config.features.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
+    </div>` : ""}
   `;
 }
 
+/** Chips are clickable (opens the edit modal, per-item Save/Delete) rather than carrying their own remove button. */
 function chipListBlockHtml(botKey, title, listKey, fieldName, items) {
   const chips = items.map((item) => `
-    <span class="chip">${escapeHtml(item)}<button data-action="remove-chip" data-bot="${escapeHtml(botKey)}" data-list="${listKey}" data-value="${escapeHtml(item)}">&times;</button></span>
+    <span class="chip" data-action="edit-chip" data-bot="${escapeHtml(botKey)}" data-list="${listKey}" data-field="${fieldName}" data-value="${escapeHtml(item)}">${escapeHtml(item)}</span>
   `).join("") || `<span class="config-empty">none</span>`;
 
   return `
@@ -283,9 +377,8 @@ function chipListBlockHtml(botKey, title, listKey, fieldName, items) {
 
 function overrideListBlockHtml(botKey, overrides) {
   const rows = Object.entries(overrides).map(([word, response]) => `
-    <div class="override-row-cfg">
+    <div class="override-row-cfg" data-action="edit-override" data-bot="${escapeHtml(botKey)}" data-word="${escapeHtml(word)}" data-response="${escapeHtml(response)}">
       <span>"${escapeHtml(word)}" &rarr; ${escapeHtml(response)}</span>
-      <button data-action="remove-override" data-bot="${escapeHtml(botKey)}" data-value="${escapeHtml(word)}">&times;</button>
     </div>
   `).join("") || `<span class="config-empty">none</span>`;
 
@@ -297,6 +390,51 @@ function overrideListBlockHtml(botKey, overrides) {
         <input type="text" class="override-word-input" placeholder="word" />
         <input type="text" class="override-response-input" placeholder="response" />
         <button data-action="add-override" data-bot="${escapeHtml(botKey)}">Add</button>
+      </div>
+    </div>
+  `;
+}
+
+/** A single editable string (self-quote marker, or one of the four prompt fields) - click to open the edit modal. */
+function editableTextBlockHtml(botKey, title, endpoint, value, isLong) {
+  return `
+    <div class="config-block">
+      <h4>${title}</h4>
+      <div class="editable-text${isLong ? " editable-text-long" : ""}" data-action="edit-text" data-bot="${escapeHtml(botKey)}"
+           data-endpoint="${endpoint}" data-title="${escapeHtml(title)}" data-long="${isLong ? "1" : "0"}" data-value="${escapeHtml(value || "")}">
+        ${value ? escapeHtml(value) : '<span class="config-empty">(click to set)</span>'}
+      </div>
+    </div>
+  `;
+}
+
+function helloTriggerRowHtml(botKey, trigger, index) {
+  return `
+    <div class="hello-trigger-row" data-index="${index}">
+      <select class="hello-match-type" data-index="${index}">
+        ${Object.entries(MATCH_TYPE_LABELS).map(([v, label]) => `<option value="${v}" ${trigger.matchType === v ? "selected" : ""}>${label}</option>`).join("")}
+      </select>
+      <input type="text" class="hello-value" data-index="${index}" value="${escapeHtml(trigger.value)}" placeholder="text - use {ref} for the bot's name" />
+      <input type="text" class="hello-also" data-index="${index}" value="${escapeHtml(trigger.alsoContains || "")}" placeholder="also contains (optional)" />
+      <button data-action="save-hello-trigger" data-bot="${escapeHtml(botKey)}" data-index="${index}" title="Save">&#10003;</button>
+      <button data-action="remove-hello-trigger" data-bot="${escapeHtml(botKey)}" data-index="${index}" title="Remove">&times;</button>
+    </div>
+  `;
+}
+
+function helloTriggersBlockHtml(botKey, triggers) {
+  const rows = triggers.map((t, i) => helloTriggerRowHtml(botKey, t, i)).join("") || `<div class="config-empty">none</div>`;
+  return `
+    <div class="config-block">
+      <h4>Hello triggers</h4>
+      <div class="hello-triggers-list">${rows}</div>
+      <div class="hello-trigger-row hello-trigger-new">
+        <select class="hello-match-type-new">
+          ${Object.entries(MATCH_TYPE_LABELS).map(([v, label]) => `<option value="${v}">${label}</option>`).join("")}
+        </select>
+        <input type="text" class="hello-value-new" placeholder="text - use {ref} for the bot's name" />
+        <input type="text" class="hello-also-new" placeholder="also contains (optional)" />
+        <button data-action="add-hello-trigger" data-bot="${escapeHtml(botKey)}">Add</button>
       </div>
     </div>
   `;
@@ -333,10 +471,25 @@ botCardsEl.addEventListener("click", async (e) => {
   const block = target.closest(".config-block");
 
   switch (target.dataset.action) {
-    case "remove-chip":
-      await api(`/bots/${encodeURIComponent(botKey)}/${target.dataset.list}/${encodeURIComponent(target.dataset.value)}`, { method: "DELETE" });
-      await refreshConfigPanel(botKey);
+    case "edit-chip": {
+      const { list, field, value } = target.dataset;
+      openEditModal({
+        title: `Edit ${field}`,
+        fields: [{ id: "value", value }],
+        onSave: async (values) => {
+          const newValue = values.value.trim();
+          if (!newValue || newValue.toLowerCase() === value.toLowerCase()) return;
+          await api(`/bots/${encodeURIComponent(botKey)}/${list}`, { method: "POST", body: JSON.stringify({ [field]: newValue }) });
+          await api(`/bots/${encodeURIComponent(botKey)}/${list}/${encodeURIComponent(value)}`, { method: "DELETE" });
+          await refreshConfigPanel(botKey);
+        },
+        onDelete: async () => {
+          await api(`/bots/${encodeURIComponent(botKey)}/${list}/${encodeURIComponent(value)}`, { method: "DELETE" });
+          await refreshConfigPanel(botKey);
+        },
+      });
       break;
+    }
     case "add-chip": {
       const input = block.querySelector(".chip-input");
       const value = input.value.trim();
@@ -348,15 +501,79 @@ botCardsEl.addEventListener("click", async (e) => {
       await refreshConfigPanel(botKey);
       break;
     }
-    case "remove-override":
-      await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides/${encodeURIComponent(target.dataset.value)}`, { method: "DELETE" });
-      await refreshConfigPanel(botKey);
+    case "edit-override": {
+      const { word, response } = target.dataset;
+      openEditModal({
+        title: "Edit callout response",
+        fields: [
+          { id: "word", label: "Word", value: word },
+          { id: "response", label: "Response", value: response },
+        ],
+        onSave: async (values) => {
+          const newWord = values.word.trim().toLowerCase();
+          const newResponse = values.response.trim();
+          if (!newWord || !newResponse) return;
+          await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides`, { method: "POST", body: JSON.stringify({ word: newWord, response: newResponse }) });
+          if (newWord !== word.toLowerCase()) {
+            await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides/${encodeURIComponent(word)}`, { method: "DELETE" });
+          }
+          await refreshConfigPanel(botKey);
+        },
+        onDelete: async () => {
+          await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides/${encodeURIComponent(word)}`, { method: "DELETE" });
+          await refreshConfigPanel(botKey);
+        },
+      });
       break;
+    }
     case "add-override": {
       const word = block.querySelector(".override-word-input").value.trim();
       const response = block.querySelector(".override-response-input").value.trim();
       if (!word || !response) return;
       await api(`/bots/${encodeURIComponent(botKey)}/callout-overrides`, { method: "POST", body: JSON.stringify({ word, response }) });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "edit-text": {
+      const { endpoint, value, title, long } = target.dataset;
+      openEditModal({
+        title,
+        fields: [{ id: "value", value, type: long === "1" ? "textarea" : "text" }],
+        onSave: async (values) => {
+          await api(`/bots/${encodeURIComponent(botKey)}${endpoint}`, { method: "POST", body: JSON.stringify({ value: values.value }) });
+          await refreshConfigPanel(botKey);
+        },
+      });
+      break;
+    }
+    case "save-hello-trigger": {
+      const index = target.dataset.index;
+      const row = target.closest(".hello-trigger-row");
+      const matchType = row.querySelector(".hello-match-type").value;
+      const value = row.querySelector(".hello-value").value.trim();
+      const alsoContains = row.querySelector(".hello-also").value.trim();
+      if (!value) return;
+      await api(`/bots/${encodeURIComponent(botKey)}/hello-triggers/${index}`, {
+        method: "POST",
+        body: JSON.stringify({ matchType, value, alsoContains: alsoContains || null }),
+      });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "remove-hello-trigger": {
+      await api(`/bots/${encodeURIComponent(botKey)}/hello-triggers/${target.dataset.index}`, { method: "DELETE" });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "add-hello-trigger": {
+      const matchType = block.querySelector(".hello-match-type-new").value;
+      const value = block.querySelector(".hello-value-new").value.trim();
+      const alsoContains = block.querySelector(".hello-also-new").value.trim();
+      if (!value) return;
+      await api(`/bots/${encodeURIComponent(botKey)}/hello-triggers`, {
+        method: "POST",
+        body: JSON.stringify({ matchType, value, alsoContains: alsoContains || null }),
+      });
       await refreshConfigPanel(botKey);
       break;
     }

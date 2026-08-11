@@ -467,6 +467,127 @@ class AdminControllerTest {
         admin.addExcludedUser("blampbot", "someone")
 
         val logs = admin.recentActivity().filterIsInstance<ActivityEvent.Log>()
-        assertTrue(logs.any { it.text.contains("excluded user added") }, "expected a config-change log entry, got: $logs")
+        assertTrue(
+            logs.any { log -> log.segments.any { it.text.contains("excluded user added") } },
+            "expected a config-change log entry, got: $logs",
+        )
+    }
+
+    // ---- Trigger keywords / transform words / self-quote marker / prompts --------------
+
+    @Test
+    fun `addTriggerKeyword and removeTriggerKeyword round-trip through botConfig`() {
+        assertTrue(admin.addTriggerKeyword("blampbot", "BLAMPY"))
+        assertTrue(admin.botConfig("blampbot")!!.triggerKeywords.contains("blampy"))
+
+        assertTrue(admin.removeTriggerKeyword("blampbot", "blampy"))
+        assertFalse(admin.botConfig("blampbot")!!.triggerKeywords.contains("blampy"))
+    }
+
+    @Test
+    fun `removeTriggerKeyword refuses to remove a bot's last keyword`() {
+        // botA ("blampbot") is configured with exactly one trigger keyword.
+        assertEquals(1, admin.botConfig("blampbot")!!.triggerKeywords.size)
+
+        val ok = admin.removeTriggerKeyword("blampbot", "blampbot")
+
+        assertFalse(ok)
+        assertEquals(listOf("blampbot"), admin.botConfig("blampbot")!!.triggerKeywords)
+    }
+
+    @Test
+    fun `a renamed trigger keyword is recognized by the real dispatch pipeline`() {
+        // A hello-back reply, not the mainline transform - MockAIClient's default response
+        // already reliably includes the username (proven elsewhere), no override needed.
+        admin.addTriggerKeyword("blampbot", "blampy")
+        admin.removeTriggerKeyword("blampbot", "blampbot")
+
+        admin.simulateMessage(user = "someviewer", message = "hi blampy")
+
+        val outgoing = admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>()
+        assertTrue(outgoing.any { it.botKey == "blampbot" }, "expected blampbot to respond to its renamed keyword, got: $outgoing")
+    }
+
+    @Test
+    fun `addTransformWord and removeTransformWord round-trip through botConfig`() {
+        assertTrue(admin.addTransformWord("blampbot", "MELON"))
+        assertTrue(admin.botConfig("blampbot")!!.transformWords.contains("melon"))
+
+        assertTrue(admin.removeTransformWord("blampbot", "melon"))
+        assertFalse(admin.botConfig("blampbot")!!.transformWords.contains("melon"))
+    }
+
+    @Test
+    fun `setSelfQuoteMarker updates botConfig`() {
+        assertTrue(admin.setSelfQuoteMarker("blampbot", "blampfied"))
+        assertEquals("blampfied", admin.botConfig("blampbot")!!.selfQuoteMarker)
+    }
+
+    @Test
+    fun `setPrompt updates the targeted field only, rejects an unknown field`() {
+        assertTrue(admin.setPrompt("blampbot", "wisdom", "a new wisdom prompt"))
+        val config = admin.botConfig("blampbot")!!
+        assertEquals("a new wisdom prompt", config.prompts.wisdom)
+        assertEquals("", config.prompts.voice)
+
+        assertFalse(admin.setPrompt("blampbot", "not-a-real-field", "x"))
+    }
+
+    // ---- Hello triggers -----------------------------------------------------------------
+
+    @Test
+    fun `addHelloTrigger appends a structured trigger visible in botConfig`() {
+        assertTrue(admin.addHelloTrigger("blampbot", "ends_with", "yo {ref}", "hey"))
+
+        val added = admin.botConfig("blampbot")!!.helloTriggers.last()
+        assertEquals("ends_with", added.matchType)
+        assertEquals("yo {ref}", added.value)
+        assertEquals("hey", added.alsoContains)
+    }
+
+    @Test
+    fun `addHelloTrigger rejects an unknown match type or blank value`() {
+        assertFalse(admin.addHelloTrigger("blampbot", "not-a-type", "hi {ref}"))
+        assertFalse(admin.addHelloTrigger("blampbot", "starts_with", "   "))
+    }
+
+    @Test
+    fun `updateHelloTrigger replaces the trigger at that index only`() {
+        admin.addHelloTrigger("blampbot", "contains", "yo")
+        val before = admin.botConfig("blampbot")!!.helloTriggers
+        val targetIndex = before.size - 1
+
+        assertTrue(admin.updateHelloTrigger("blampbot", targetIndex, "ends_with", "sup {ref}"))
+
+        val after = admin.botConfig("blampbot")!!.helloTriggers
+        assertEquals(before.size, after.size)
+        assertEquals("ends_with", after[targetIndex].matchType)
+        assertEquals("sup {ref}", after[targetIndex].value)
+    }
+
+    @Test
+    fun `updateHelloTrigger and removeHelloTrigger reject an out-of-range index`() {
+        assertFalse(admin.updateHelloTrigger("blampbot", 99, "contains", "x"))
+        assertFalse(admin.removeHelloTrigger("blampbot", 99))
+    }
+
+    @Test
+    fun `removeHelloTrigger removes exactly the targeted trigger`() {
+        admin.addHelloTrigger("blampbot", "contains", "yo")
+        val sizeBefore = admin.botConfig("blampbot")!!.helloTriggers.size
+
+        assertTrue(admin.removeHelloTrigger("blampbot", 0))
+
+        assertEquals(sizeBefore - 1, admin.botConfig("blampbot")!!.helloTriggers.size)
+    }
+
+    @Test
+    fun `a newly added hello trigger is recognized by the real dispatch pipeline`() {
+        admin.addHelloTrigger("blampbot", "ends_with", "yo {ref}")
+
+        admin.simulateMessage(user = "someviewer", message = "hey there yo blampbot")
+
+        val outgoing = admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>()
+        assertTrue(outgoing.any { it.botKey == "blampbot" }, "expected the new hello trigger to fire, got: $outgoing")
     }
 }

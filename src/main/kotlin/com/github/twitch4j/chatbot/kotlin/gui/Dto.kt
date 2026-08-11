@@ -2,9 +2,12 @@ package com.github.twitch4j.chatbot.kotlin.gui
 
 import com.github.twitch4j.chatbot.kotlin.controller.BotConfigDetail
 import com.github.twitch4j.chatbot.kotlin.controller.BotStatus
+import com.github.twitch4j.chatbot.kotlin.controller.HelloTriggerDetail
+import com.github.twitch4j.chatbot.kotlin.controller.PromptsDetail
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownStatus
+import com.github.twitch4j.chatbot.kotlin.core.LogSegment
 import kotlinx.serialization.Serializable
 
 /**
@@ -60,6 +63,11 @@ fun CooldownSnapshot.toDto() = CooldownSnapshotDto(
 )
 
 @Serializable
+data class LogSegmentDto(val level: String, val text: String)
+
+fun LogSegment.toDto() = LogSegmentDto(level, text)
+
+@Serializable
 data class ActivityEventDto(
     val type: String,
     val timestampMs: Long,
@@ -72,7 +80,7 @@ data class ActivityEventDto(
     val prompt: String? = null,
     val response: String? = null,
     val mocked: Boolean? = null,
-    val level: String? = null,
+    val segments: List<LogSegmentDto>? = null,
 )
 
 fun ActivityEvent.toDto(): ActivityEventDto = when (this) {
@@ -106,8 +114,7 @@ fun ActivityEvent.toDto(): ActivityEventDto = when (this) {
     is ActivityEvent.Log -> ActivityEventDto(
         type = "log",
         timestampMs = timestamp.toEpochMilli(),
-        message = text,
-        level = level,
+        segments = segments.map { it.toDto() },
     )
 }
 
@@ -127,6 +134,16 @@ data class MockOverrideDto(val keyword: String, val response: String)
 data class SimulateMessageDto(val user: String, val message: String, val channel: String? = null)
 
 @Serializable
+data class HelloTriggerDetailDto(val matchType: String, val value: String, val alsoContains: String? = null)
+
+fun HelloTriggerDetail.toDto() = HelloTriggerDetailDto(matchType, value, alsoContains)
+
+@Serializable
+data class PromptsDetailDto(val voice: String, val transform: String, val wisdom: String, val request: String)
+
+fun PromptsDetail.toDto() = PromptsDetailDto(voice, transform, wisdom, request)
+
+@Serializable
 data class BotConfigDetailDto(
     val key: String,
     val accountUsername: String,
@@ -142,10 +159,11 @@ data class BotConfigDetailDto(
     val moods: List<String>,
     val activeMood: String,
     val minimumMessagesBetween: Int,
-    val helloTriggers: List<String>,
+    val helloTriggers: List<HelloTriggerDetailDto>,
     val transformWords: List<String>,
     val selfQuoteMarker: String,
     val features: List<String>,
+    val prompts: PromptsDetailDto,
 )
 
 fun BotConfigDetail.toDto() = BotConfigDetailDto(
@@ -163,10 +181,11 @@ fun BotConfigDetail.toDto() = BotConfigDetailDto(
     moods = moods,
     activeMood = activeMood,
     minimumMessagesBetween = minimumMessagesBetween,
-    helloTriggers = helloTriggers,
+    helloTriggers = helloTriggers.map { it.toDto() },
     transformWords = transformWords,
     selfQuoteMarker = selfQuoteMarker,
     features = features,
+    prompts = prompts.toDto(),
 )
 
 @Serializable
@@ -195,3 +214,12 @@ data class CooldownDurationDto(val ms: Long)
 
 @Serializable
 data class MainlineIntervalDto(val minMs: Long, val maxMs: Long)
+
+@Serializable
+data class KeywordDto(val keyword: String)
+
+@Serializable
+data class StringValueDto(val value: String)
+
+@Serializable
+data class HelloTriggerRequestDto(val matchType: String, val value: String, val alsoContains: String? = null)

@@ -66,16 +66,17 @@ data class CooldownOverrides(
 data class HelloTrigger(
     val startsWith: String? = null,
     val contains: String? = null,
+    val endsWith: String? = null,
     val alsoContains: String? = null,
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class TransformConfig(
-    /** Candidate replacement words/phrases; one is picked at random per mainline attempt. */
-    val words: List<String> = listOf(),
-    /** Detects the bot quoting its own past output back at itself (e.g. "blampfied"). */
-    val selfQuoteMarker: String = "",
+    /** Candidate replacement words/phrases; one is picked at random per mainline attempt. Live-editable. */
+    var words: List<String> = listOf(),
+    /** Detects the bot quoting its own past output back at itself (e.g. "blampfied"). Live-editable. */
+    var selfQuoteMarker: String = "",
 )
 
 /** A named response "mood" (generalizes Buttsbot's nice/mean niceness toggle for any bot). */
@@ -86,14 +87,14 @@ data class MoodConfig(
     val helloPrompt: String = "",
 )
 
-/** Prompt template pieces; `{UPPER}`/`{lower}`/`{name}` are substituted at runtime. */
+/** Prompt template pieces; `{UPPER}`/`{lower}`/`{name}` are substituted at runtime. All live-editable. */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class PromptConfig(
-    val voice: String = "",
-    val transform: String = "",
-    val wisdom: String = "",
-    val request: String = "",
+    var voice: String = "",
+    var transform: String = "",
+    var wisdom: String = "",
+    var request: String = "",
 )
 
 /** Opt-in bot features (generalizes the turkey easter egg and Buttsbot's retry action). */

@@ -300,4 +300,102 @@ class GuiServerTest {
         assertEquals(1000L, snapshot.mainlineIntervalMinimumMs)
         assertEquals(2000L, snapshot.mainlineIntervalMaximumMs)
     }
+
+    @Test
+    fun `trigger keywords can be added and removed via REST`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val addResponse = client.post("/api/bots/blampbot/trigger-keywords") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(KeywordDto.serializer(), KeywordDto("blampy")))
+        }
+        assertEquals(HttpStatusCode.OK, addResponse.status)
+
+        var config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        assertTrue(config.triggerKeywords.contains("blampy"))
+
+        val removeResponse = client.delete("/api/bots/blampbot/trigger-keywords/blampy")
+        assertEquals(HttpStatusCode.OK, removeResponse.status)
+
+        config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        assertTrue(!config.triggerKeywords.contains("blampy"))
+    }
+
+    @Test
+    fun `removing a bot's last trigger keyword is rejected`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val response = client.delete("/api/bots/blampbot/trigger-keywords/blampbot")
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+    }
+
+    @Test
+    fun `self-quote-marker and prompts fields can be set via REST`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val markerResponse = client.post("/api/bots/blampbot/self-quote-marker") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(StringValueDto.serializer(), StringValueDto("blampfied")))
+        }
+        assertEquals(HttpStatusCode.OK, markerResponse.status)
+
+        val promptResponse = client.post("/api/bots/blampbot/prompts/wisdom") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(StringValueDto.serializer(), StringValueDto("a new wisdom prompt")))
+        }
+        assertEquals(HttpStatusCode.OK, promptResponse.status)
+
+        val config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        assertEquals("blampfied", config.selfQuoteMarker)
+        assertEquals("a new wisdom prompt", config.prompts.wisdom)
+    }
+
+    @Test
+    fun `hello triggers can be added, updated, and removed via REST`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val addResponse = client.post("/api/bots/blampbot/hello-triggers") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(HelloTriggerRequestDto.serializer(), HelloTriggerRequestDto("ends_with", "yo {ref}")))
+        }
+        assertEquals(HttpStatusCode.OK, addResponse.status)
+
+        var config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        val addedIndex = config.helloTriggers.indexOfFirst { it.value == "yo {ref}" }
+        assertTrue(addedIndex >= 0)
+
+        val updateResponse = client.post("/api/bots/blampbot/hello-triggers/$addedIndex") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(HelloTriggerRequestDto.serializer(), HelloTriggerRequestDto("contains", "sup {ref}")))
+        }
+        assertEquals(HttpStatusCode.OK, updateResponse.status)
+
+        config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        assertEquals("contains", config.helloTriggers[addedIndex].matchType)
+        assertEquals("sup {ref}", config.helloTriggers[addedIndex].value)
+
+        val removeResponse = client.delete("/api/bots/blampbot/hello-triggers/$addedIndex")
+        assertEquals(HttpStatusCode.OK, removeResponse.status)
+
+        config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        assertTrue(config.helloTriggers.none { it.value == "sup {ref}" })
+    }
+
+    @Test
+    fun `hello-triggers update with a non-numeric index returns 400`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val response = client.post("/api/bots/blampbot/hello-triggers/not-a-number") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(HelloTriggerRequestDto.serializer(), HelloTriggerRequestDto("contains", "x")))
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
 }

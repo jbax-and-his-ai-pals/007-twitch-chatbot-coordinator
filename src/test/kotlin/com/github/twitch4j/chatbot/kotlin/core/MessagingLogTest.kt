@@ -9,7 +9,9 @@ import org.junit.jupiter.api.Test
  * Covers [Messaging]'s [ActivityBus] wiring: stdout output itself is unchanged (not
  * re-verified here), but every complete "line" - possibly built from several
  * addNewLine=false fragments, as [Cooldowns.printCooldownMessages] does - should also
- * reach the bus as one plain-text [ActivityEvent.Log], with no leftover ANSI codes.
+ * reach the bus as one [ActivityEvent.Log] with one [LogSegment] per fragment (level +
+ * plain text, no leftover ANSI codes), so the GUI can color each fragment the way the
+ * console did instead of flattening a multi-color line into one color.
  */
 class MessagingLogTest {
     @AfterEach
@@ -26,21 +28,24 @@ class MessagingLogTest {
         return bus.recent().filterIsInstance<ActivityEvent.Log>()
     }
 
+    private fun ActivityEvent.Log.fullText() = segments.joinToString("") { it.text }
+
     @Test
-    fun `a single complete call publishes one Log event with the full text`() {
+    fun `a single complete call publishes one Log event with one segment`() {
         val logs = published { Messaging.info("hello world") }
 
         assertEquals(1, logs.size)
-        assertTrue(logs.single().text.contains("hello world"))
-        assertEquals("warn", logs.single().level)
+        assertEquals(1, logs.single().segments.size)
+        assertTrue(logs.single().fullText().contains("hello world"))
+        assertEquals("warn", logs.single().segments.single().level)
     }
 
     @Test
     fun `error uses the error level`() {
         val logs = published { Messaging.error("boom") }
 
-        assertEquals("error", logs.single().level)
-        assertTrue(logs.single().text.contains("boom"))
+        assertEquals("error", logs.single().segments.single().level)
+        assertTrue(logs.single().fullText().contains("boom"))
     }
 
     @Test
@@ -52,20 +57,23 @@ class MessagingLogTest {
         }
 
         assertEquals(1, logs.size)
-        val text = logs.single().text
+        val text = logs.single().fullText()
         assertTrue(text.contains("COOLDOWNS:"))
         assertTrue(text.contains("[MAINLINE]"))
         assertTrue(text.contains("[WISDOM (5.0s)]"))
     }
 
     @Test
-    fun `the level of a multi-fragment line comes from its first fragment`() {
+    fun `each fragment keeps its own level, instead of the whole line sharing one`() {
         val logs = published {
             Messaging.error("first fragment", addNewLine = false)
             Messaging.green(" second fragment")
         }
 
-        assertEquals("error", logs.single().level)
+        val segments = logs.single().segments
+        assertEquals(2, segments.size)
+        assertEquals("error", segments[0].level)
+        assertEquals("success", segments[1].level)
     }
 
     @Test
@@ -73,7 +81,7 @@ class MessagingLogTest {
         val escapeChar = '\u001b'
         val logs = published { Messaging.callout("TOIKEY!") }
 
-        assertTrue(escapeChar !in logs.single().text)
+        assertTrue(logs.single().segments.none { escapeChar in it.text })
     }
 
     @Test
