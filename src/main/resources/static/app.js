@@ -369,7 +369,7 @@ function configSectionHtml(botKey, config, cooldowns) {
     </div>
   `;
 
-  const greetings = helloTriggersBlockHtml(botKey, config.helloTriggers);
+  const greetings = helloTriggersBlockHtml("bot", botKey, config.helloTriggers);
 
   const moderation = `
     ${chipListBlockHtml("bot", botKey, "Excluded users", "excluded-users", "user", config.excludedUsers)}
@@ -391,25 +391,22 @@ function configSectionHtml(botKey, config, cooldowns) {
     <div class="config-block">
       <h4>Message length</h4>
       <div class="config-numfields">
-        <label>min <input type="number" class="cfg-num" data-field="msg-min" value="${config.messageLengthMinimum}" /></label>
-        <label>max <input type="number" class="cfg-num" data-field="msg-max" value="${config.messageLengthMaximum}" /></label>
-        <button data-action="save-message-length" data-bot="${escapeHtml(botKey)}">Save</button>
+        <label>min <input type="number" class="cfg-num" data-field="msg-min" data-autosave="message-length" data-bot="${escapeHtml(botKey)}" data-saved="${config.messageLengthMinimum}" value="${config.messageLengthMinimum}" /></label>
+        <label>max <input type="number" class="cfg-num" data-field="msg-max" data-autosave="message-length" data-bot="${escapeHtml(botKey)}" data-saved="${config.messageLengthMaximum}" value="${config.messageLengthMaximum}" /></label>
       </div>
     </div>
 
     <div class="config-block">
       <h4>Similarity threshold</h4>
       <div class="config-numfields">
-        <input type="number" class="cfg-num" data-field="similarity" value="${config.similarityThreshold}" />
-        <button data-action="save-similarity" data-bot="${escapeHtml(botKey)}">Save</button>
+        <input type="number" class="cfg-num" data-autosave="similarity" data-bot="${escapeHtml(botKey)}" data-saved="${config.similarityThreshold}" value="${config.similarityThreshold}" />
       </div>
     </div>
 
     <div class="config-block">
       <h4>Minimum messages between mainline actions</h4>
       <div class="config-numfields">
-        <input type="number" class="cfg-num" data-field="min-messages" value="${config.minimumMessagesBetween}" />
-        <button data-action="save-min-messages" data-bot="${escapeHtml(botKey)}">Save</button>
+        <input type="number" class="cfg-num" data-autosave="min-messages" data-bot="${escapeHtml(botKey)}" data-saved="${config.minimumMessagesBetween}" value="${config.minimumMessagesBetween}" />
       </div>
     </div>
   `;
@@ -418,20 +415,18 @@ function configSectionHtml(botKey, config, cooldowns) {
     <div class="config-block">
       <h4>Cooldown durations (ms)</h4>
       <div class="config-numfields cooldown-durations">
-        <label>wisdom <input type="number" class="cfg-num" data-field="cd-wisdom" value="${cooldowns.wisdom.configuredMs}" /></label>
-        <label>callout <input type="number" class="cfg-num" data-field="cd-callout" value="${cooldowns.callout.configuredMs}" /></label>
-        <label>retry <input type="number" class="cfg-num" data-field="cd-retry" value="${cooldowns.retry.configuredMs}" /></label>
-        <label>request <input type="number" class="cfg-num" data-field="cd-request" value="${cooldowns.request.configuredMs}" /></label>
-        <button data-action="save-cooldown-durations" data-bot="${escapeHtml(botKey)}">Save</button>
+        <label>wisdom <input type="number" class="cfg-num" data-autosave="cooldown-duration" data-cooldown-type="wisdom" data-bot="${escapeHtml(botKey)}" data-saved="${cooldowns.wisdom.configuredMs}" value="${cooldowns.wisdom.configuredMs}" /></label>
+        <label>callout <input type="number" class="cfg-num" data-autosave="cooldown-duration" data-cooldown-type="callout" data-bot="${escapeHtml(botKey)}" data-saved="${cooldowns.callout.configuredMs}" value="${cooldowns.callout.configuredMs}" /></label>
+        <label>retry <input type="number" class="cfg-num" data-autosave="cooldown-duration" data-cooldown-type="retry" data-bot="${escapeHtml(botKey)}" data-saved="${cooldowns.retry.configuredMs}" value="${cooldowns.retry.configuredMs}" /></label>
+        <label>request <input type="number" class="cfg-num" data-autosave="cooldown-duration" data-cooldown-type="request" data-bot="${escapeHtml(botKey)}" data-saved="${cooldowns.request.configuredMs}" value="${cooldowns.request.configuredMs}" /></label>
       </div>
     </div>
 
     <div class="config-block">
       <h4>Mainline interval bounds (ms)</h4>
       <div class="config-numfields">
-        <label>min <input type="number" class="cfg-num" data-field="mainline-min" value="${cooldowns.mainlineIntervalMinimumMs}" /></label>
-        <label>max <input type="number" class="cfg-num" data-field="mainline-max" value="${cooldowns.mainlineIntervalMaximumMs}" /></label>
-        <button data-action="save-mainline-interval" data-bot="${escapeHtml(botKey)}">Save</button>
+        <label>min <input type="number" class="cfg-num" data-field="mainline-min" data-autosave="mainline-interval" data-bot="${escapeHtml(botKey)}" data-saved="${cooldowns.mainlineIntervalMinimumMs}" value="${cooldowns.mainlineIntervalMinimumMs}" /></label>
+        <label>max <input type="number" class="cfg-num" data-field="mainline-max" data-autosave="mainline-interval" data-bot="${escapeHtml(botKey)}" data-saved="${cooldowns.mainlineIntervalMaximumMs}" value="${cooldowns.mainlineIntervalMaximumMs}" /></label>
       </div>
     </div>
   `;
@@ -502,6 +497,8 @@ function overrideListBlockHtml(scope, botKey, overrides) {
 }
 
 function commonConfigSectionHtml(config) {
+  const greetings = helloTriggersBlockHtml("common", null, config.helloTriggers);
+
   const moderation = `
     ${chipListBlockHtml("common", null, "Excluded users", "excluded-users", "user", config.excludedUsers)}
     ${chipListBlockHtml("common", null, "Callout words", "callout-words", "word", config.calloutWords)}
@@ -509,7 +506,10 @@ function commonConfigSectionHtml(config) {
     ${overrideListBlockHtml("common", null, config.calloutResponseOverrides)}
   `;
 
-  return configGroupHtml("Moderation", "config-group-moderation", moderation);
+  return `
+    ${configGroupHtml("Greetings", "config-group-greetings", greetings)}
+    ${configGroupHtml("Moderation", "config-group-moderation", moderation)}
+  `;
 }
 
 async function refreshCommonConfigPanel() {
@@ -532,22 +532,21 @@ function editableTextBlockHtml(botKey, title, endpoint, value, isLong) {
   `;
 }
 
-function helloTriggerRowHtml(botKey, trigger, index) {
+function helloTriggerRowHtml(scope, botKey, trigger, index) {
   return `
-    <div class="hello-trigger-row" data-index="${index}">
-      <select class="hello-match-type" data-index="${index}">
+    <div class="hello-trigger-row" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-index="${index}">
+      <select class="hello-match-type" data-autosave="hello-trigger" data-saved="${trigger.matchType}">
         ${Object.entries(MATCH_TYPE_LABELS).map(([v, label]) => `<option value="${v}" ${trigger.matchType === v ? "selected" : ""}>${label}</option>`).join("")}
       </select>
-      <input type="text" class="hello-value" data-index="${index}" value="${escapeHtml(trigger.value)}" placeholder="text - use {ref} for the bot's name" />
-      <input type="text" class="hello-also" data-index="${index}" value="${escapeHtml(trigger.alsoContains || "")}" placeholder="also contains (optional)" />
-      <button data-action="save-hello-trigger" data-bot="${escapeHtml(botKey)}" data-index="${index}" title="Save">&#10003;</button>
-      <button data-action="remove-hello-trigger" data-bot="${escapeHtml(botKey)}" data-index="${index}" title="Remove">&times;</button>
+      <input type="text" class="hello-value" data-autosave="hello-trigger" data-saved="${escapeHtml(trigger.value)}" value="${escapeHtml(trigger.value)}" placeholder="text - use {ref} for the bot's name" />
+      <input type="text" class="hello-also" data-autosave="hello-trigger" data-saved="${escapeHtml(trigger.alsoContains || "")}" value="${escapeHtml(trigger.alsoContains || "")}" placeholder="also contains (optional)" />
+      <button data-action="remove-hello-trigger" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-index="${index}" title="Remove">&times;</button>
     </div>
   `;
 }
 
-function helloTriggersBlockHtml(botKey, triggers) {
-  const rows = triggers.map((t, i) => helloTriggerRowHtml(botKey, t, i)).join("") || `<div class="config-empty">none</div>`;
+function helloTriggersBlockHtml(scope, botKey, triggers) {
+  const rows = triggers.map((t, i) => helloTriggerRowHtml(scope, botKey, t, i)).join("") || `<div class="config-empty">none</div>`;
   return `
     <div class="config-block">
       <h4>Hello triggers</h4>
@@ -558,7 +557,7 @@ function helloTriggersBlockHtml(botKey, triggers) {
         </select>
         <input type="text" class="hello-value-new" placeholder="text - use {ref} for the bot's name" />
         <input type="text" class="hello-also-new" placeholder="also contains (optional)" />
-        <button data-action="add-hello-trigger" data-bot="${escapeHtml(botKey)}">Add</button>
+        <button data-action="add-hello-trigger" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}">Add</button>
       </div>
     </div>
   `;
@@ -591,7 +590,6 @@ botsPanelEl.addEventListener("click", async (e) => {
   const target = e.target.closest("[data-action]");
   if (!target) return;
   const botKey = target.dataset.bot;
-  const panel = target.closest(".config-panel");
   const block = target.closest(".config-block");
 
   switch (target.dataset.action) {
@@ -679,76 +677,131 @@ botsPanelEl.addEventListener("click", async (e) => {
       });
       break;
     }
-    case "save-hello-trigger": {
-      const index = target.dataset.index;
-      const row = target.closest(".hello-trigger-row");
-      const matchType = row.querySelector(".hello-match-type").value;
-      const value = row.querySelector(".hello-value").value.trim();
-      const alsoContains = row.querySelector(".hello-also").value.trim();
-      if (!value) return;
-      await api(`/bots/${encodeURIComponent(botKey)}/hello-triggers/${index}`, {
-        method: "POST",
-        body: JSON.stringify({ matchType, value, alsoContains: alsoContains || null }),
-      });
-      await refreshConfigPanel(botKey);
-      break;
-    }
     case "remove-hello-trigger": {
-      await api(`/bots/${encodeURIComponent(botKey)}/hello-triggers/${target.dataset.index}`, { method: "DELETE" });
-      await refreshConfigPanel(botKey);
+      const { scope } = target.dataset;
+      await api(`${scopedPrefix(scope, botKey)}/hello-triggers/${target.dataset.index}`, { method: "DELETE" });
+      await refreshScoped(scope, botKey);
       break;
     }
     case "add-hello-trigger": {
+      const { scope } = target.dataset;
       const matchType = block.querySelector(".hello-match-type-new").value;
       const value = block.querySelector(".hello-value-new").value.trim();
       const alsoContains = block.querySelector(".hello-also-new").value.trim();
       if (!value) return;
-      await api(`/bots/${encodeURIComponent(botKey)}/hello-triggers`, {
+      await api(`${scopedPrefix(scope, botKey)}/hello-triggers`, {
         method: "POST",
         body: JSON.stringify({ matchType, value, alsoContains: alsoContains || null }),
       });
-      await refreshConfigPanel(botKey);
+      await refreshScoped(scope, botKey);
       break;
     }
-    case "save-message-length": {
-      const minimum = Number(panel.querySelector('[data-field="msg-min"]').value);
-      const maximum = Number(panel.querySelector('[data-field="msg-max"]').value);
-      await api(`/bots/${encodeURIComponent(botKey)}/message-length`, { method: "POST", body: JSON.stringify({ minimum, maximum }) });
-      await refreshConfigPanel(botKey);
+  }
+});
+
+// ==================================================================================
+// Autosave: numeric fields and hello-trigger rows save on blur instead of a Save
+// button, but only when the value actually changed from what's already saved
+// (tracked via each field's data-saved attribute) and parses as a number.
+// ==================================================================================
+
+async function autosave(path, body) {
+  try {
+    await api(path, { method: "POST", body: JSON.stringify(body) });
+    return true;
+  } catch (e) {
+    console.error("autosave failed", path, e);
+    return false;
+  }
+}
+
+/** Brief border flash so a blur-triggered save (no button to click) still gives feedback. */
+function flashSaved(...elements) {
+  elements.forEach((el) => {
+    el.classList.add("autosave-flash");
+    setTimeout(() => el.classList.remove("autosave-flash"), 600);
+  });
+}
+
+function numChanged(el) {
+  return el.value.trim() !== "" && el.value !== el.dataset.saved && Number.isFinite(Number(el.value));
+}
+
+async function autosaveSingle(el, path, body) {
+  if (!numChanged(el)) return;
+  if (await autosave(path, body(Number(el.value)))) {
+    el.dataset.saved = el.value;
+    flashSaved(el);
+  }
+}
+
+async function autosavePair(container, fieldA, fieldB, path, body) {
+  const elA = container.querySelector(`[data-field="${fieldA}"]`);
+  const elB = container.querySelector(`[data-field="${fieldB}"]`);
+  const aChanged = elA.value !== elA.dataset.saved;
+  const bChanged = elB.value !== elB.dataset.saved;
+  if (!aChanged && !bChanged) return;
+  if (elA.value.trim() === "" || elB.value.trim() === "") return;
+  if (!Number.isFinite(Number(elA.value)) || !Number.isFinite(Number(elB.value))) return;
+  if (await autosave(path, body(Number(elA.value), Number(elB.value)))) {
+    elA.dataset.saved = elA.value;
+    elB.dataset.saved = elB.value;
+    flashSaved(elA, elB);
+  }
+}
+
+async function autosaveHelloTrigger(el) {
+  const row = el.closest(".hello-trigger-row");
+  const matchTypeEl = row.querySelector(".hello-match-type");
+  const valueEl = row.querySelector(".hello-value");
+  const alsoEl = row.querySelector(".hello-also");
+  if (matchTypeEl.value === matchTypeEl.dataset.saved && valueEl.value === valueEl.dataset.saved && alsoEl.value === alsoEl.dataset.saved) return;
+  const value = valueEl.value.trim();
+  if (!value) return;
+
+  const { scope, bot: botKey, index } = row.dataset;
+  const alsoContains = alsoEl.value.trim();
+  const ok = await autosave(`${scopedPrefix(scope, botKey)}/hello-triggers/${index}`, {
+    matchType: matchTypeEl.value,
+    value,
+    alsoContains: alsoContains || null,
+  });
+  if (ok) {
+    matchTypeEl.dataset.saved = matchTypeEl.value;
+    valueEl.dataset.saved = valueEl.value;
+    alsoEl.dataset.saved = alsoEl.value;
+    flashSaved(matchTypeEl, valueEl, alsoEl);
+  }
+}
+
+botsPanelEl.addEventListener("focusout", async (e) => {
+  const el = e.target;
+  const kind = el.dataset.autosave;
+  if (!kind) return;
+  const botKey = el.dataset.bot;
+  const block = el.closest(".config-block");
+
+  switch (kind) {
+    case "message-length":
+      await autosavePair(block, "msg-min", "msg-max", `/bots/${encodeURIComponent(botKey)}/message-length`,
+        (minimum, maximum) => ({ minimum, maximum }));
       break;
-    }
-    case "save-similarity": {
-      const threshold = Number(panel.querySelector('[data-field="similarity"]').value);
-      await api(`/bots/${encodeURIComponent(botKey)}/similarity-threshold`, { method: "POST", body: JSON.stringify({ threshold }) });
-      await refreshConfigPanel(botKey);
+    case "similarity":
+      await autosaveSingle(el, `/bots/${encodeURIComponent(botKey)}/similarity-threshold`, (threshold) => ({ threshold }));
       break;
-    }
-    case "save-min-messages": {
-      const count = Number(panel.querySelector('[data-field="min-messages"]').value);
-      await api(`/bots/${encodeURIComponent(botKey)}/minimum-messages-between`, { method: "POST", body: JSON.stringify({ count }) });
-      await refreshConfigPanel(botKey);
+    case "min-messages":
+      await autosaveSingle(el, `/bots/${encodeURIComponent(botKey)}/minimum-messages-between`, (count) => ({ count }));
       break;
-    }
-    case "save-cooldown-durations": {
-      const reads = {
-        wisdom: Number(panel.querySelector('[data-field="cd-wisdom"]').value),
-        callout: Number(panel.querySelector('[data-field="cd-callout"]').value),
-        retry: Number(panel.querySelector('[data-field="cd-retry"]').value),
-        request: Number(panel.querySelector('[data-field="cd-request"]').value),
-      };
-      await Promise.all(Object.entries(reads).map(([type, ms]) =>
-        api(`/bots/${encodeURIComponent(botKey)}/cooldown-duration/${type}`, { method: "POST", body: JSON.stringify({ ms }) })
-      ));
-      await refreshConfigPanel(botKey);
+    case "cooldown-duration":
+      await autosaveSingle(el, `/bots/${encodeURIComponent(botKey)}/cooldown-duration/${el.dataset.cooldownType}`, (ms) => ({ ms }));
       break;
-    }
-    case "save-mainline-interval": {
-      const minMs = Number(panel.querySelector('[data-field="mainline-min"]').value);
-      const maxMs = Number(panel.querySelector('[data-field="mainline-max"]').value);
-      await api(`/bots/${encodeURIComponent(botKey)}/mainline-interval`, { method: "POST", body: JSON.stringify({ minMs, maxMs }) });
-      await refreshConfigPanel(botKey);
+    case "mainline-interval":
+      await autosavePair(block, "mainline-min", "mainline-max", `/bots/${encodeURIComponent(botKey)}/mainline-interval`,
+        (minMs, maxMs) => ({ minMs, maxMs }));
       break;
-    }
+    case "hello-trigger":
+      await autosaveHelloTrigger(el);
+      break;
   }
 });
 

@@ -403,6 +403,38 @@ class GuiServerTest {
     }
 
     @Test
+    fun `common-config hello triggers can be added, updated, and removed via REST`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val addResponse = client.post("/api/common-config/hello-triggers") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(HelloTriggerRequestDto.serializer(), HelloTriggerRequestDto("ends_with", "yo {ref}")))
+        }
+        assertEquals(HttpStatusCode.OK, addResponse.status)
+
+        var config = json.decodeFromString<CommonConfigDetailDto>(client.get("/api/common-config").bodyAsText())
+        val addedIndex = config.helloTriggers.indexOfFirst { it.value == "yo {ref}" }
+        assertTrue(addedIndex >= 0)
+
+        val updateResponse = client.post("/api/common-config/hello-triggers/$addedIndex") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(HelloTriggerRequestDto.serializer(), HelloTriggerRequestDto("contains", "sup {ref}")))
+        }
+        assertEquals(HttpStatusCode.OK, updateResponse.status)
+
+        config = json.decodeFromString<CommonConfigDetailDto>(client.get("/api/common-config").bodyAsText())
+        assertEquals("contains", config.helloTriggers[addedIndex].matchType)
+        assertEquals("sup {ref}", config.helloTriggers[addedIndex].value)
+
+        val removeResponse = client.delete("/api/common-config/hello-triggers/$addedIndex")
+        assertEquals(HttpStatusCode.OK, removeResponse.status)
+
+        config = json.decodeFromString<CommonConfigDetailDto>(client.get("/api/common-config").bodyAsText())
+        assertTrue(config.helloTriggers.none { it.value == "sup {ref}" })
+    }
+
+    @Test
     fun `GET api common-config returns the shared config, starting empty`() = testApplication {
         val (admin, _) = adminWithOneBot()
         application { guiModule(admin) }

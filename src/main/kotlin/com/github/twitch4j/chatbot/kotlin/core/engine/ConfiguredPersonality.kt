@@ -82,7 +82,7 @@ class ConfiguredPersonality(
         val isYes = referenceForms.any { message == "$it yes" }
         val isNo = referenceForms.any { message == "$it no" }
         val isWhy = referenceForms.any { message == "$it why" }
-        val isHello = HelloMatcher.matches(message, bot.helloTriggers, referenceForms)
+        val isHello = HelloMatcher.matches(message, bot.helloTriggers + commonConfig.helloTriggers, referenceForms)
         val wisdomMatched = referenceForms.any { message.startsWith("$it wisdom") }
         val retryPrefix = retryFeature?.let { feature ->
             referenceForms.map { "${feature.triggerPrefix.lowercase()}$it" }.firstOrNull { message.startsWith(it) }

@@ -6,16 +6,18 @@ package com.github.twitch4j.chatbot.kotlin.core
  * mutable via the GUI's "Common configuration" panel). Unlike [DefaultsConfig] (a one-time
  * seed baked into each bot's own list at [BotDefinition.resolve] time, for fields that
  * don't need this - [BotDefinition.messageLength]/[BotDefinition.similarityThreshold]/
- * [BotDefinition.cooldowns] stay purely per-bot), these four are read fresh by every bot on
- * every dispatch ([com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent.eligibilityFor]),
- * so a GUI edit here applies to every bot immediately, and a per-bot list is purely additive
- * on top of it - never a copy of it.
+ * [BotDefinition.cooldowns] stay purely per-bot), these fields are read fresh by every bot
+ * on every dispatch ([com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent.eligibilityFor]
+ * for the word/user lists, [com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality]
+ * for [helloTriggers]), so a GUI edit here applies to every bot immediately, and a per-bot
+ * list is purely additive on top of it - never a copy of it.
  */
 data class CommonConfig(
     var excludedUsers: Set<String> = setOf(),
     var calloutWords: List<String> = listOf(),
     var forbiddenWords: List<String> = listOf(),
     var calloutResponseOverrides: Map<String, String> = mapOf(),
+    var helloTriggers: List<HelloTrigger> = listOf(),
 ) {
     companion object {
         fun from(defaults: DefaultsConfig): CommonConfig = CommonConfig(
@@ -23,6 +25,7 @@ data class CommonConfig(
             calloutWords = defaults.calloutWords,
             forbiddenWords = defaults.forbiddenWords,
             calloutResponseOverrides = defaults.calloutResponseOverrides,
+            helloTriggers = defaults.helloTriggers,
         )
     }
 }
@@ -41,10 +44,10 @@ data class ResolvedCooldowns(
  * [DefaultsConfig]. This is what [com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality]
  * actually runs on - no more per-bot Kotlin subclasses.
  *
- * [excludedUsers]/[calloutWords]/[forbiddenWords]/[calloutResponseOverrides] hold only this
- * bot's *own* additions (`..._add` in YAML, plus its own account) - the shared baseline
- * every bot also recognizes lives in [CommonConfig] and is checked alongside these at
- * eligibility time, not merged in here.
+ * [excludedUsers]/[calloutWords]/[forbiddenWords]/[calloutResponseOverrides]/[helloTriggers]
+ * hold only this bot's *own* additions (`..._add` in YAML, plus its own account) - the
+ * shared baseline every bot also recognizes lives in [CommonConfig] and is checked alongside
+ * these at eligibility/greeting-match time, not merged in here.
  *
  * Several fields are `var` rather than `val` so the GUI's config panel can mutate a running
  * bot's tuning in place - [com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent.eligibilityFor]
@@ -115,7 +118,7 @@ data class BotDefinition(
                 messageLength = raw.messageLength ?: defaults.messageLength,
                 similarityThreshold = raw.similarityThreshold ?: defaults.similarityThreshold,
                 cooldowns = cooldowns,
-                helloTriggers = raw.helloTriggers,
+                helloTriggers = raw.helloTriggersAdd,
                 transform = raw.transform,
                 moods = moods,
                 activeMood = activeMood,

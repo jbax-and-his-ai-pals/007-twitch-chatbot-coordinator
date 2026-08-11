@@ -130,6 +130,8 @@ data class DefaultsConfig(
     val forbiddenWords: List<String> = listOf(),
     /** Special-cased responses for specific callout words; anything else falls back to "$WORD!". */
     val calloutResponseOverrides: Map<String, String> = mapOf(),
+    /** Greeting phrases every bot recognizes, on top of whatever each bot adds via `hello_triggers_add`. */
+    val helloTriggers: List<HelloTrigger> = listOf(),
     val cooldowns: CooldownDefaults = CooldownDefaults(),
 )
 
@@ -158,7 +160,8 @@ data class RawBotConfig(
     val messageLength: MessageLengthConfig? = null,
     val similarityThreshold: Int? = null,
     val cooldowns: CooldownOverrides? = null,
-    val helloTriggers: List<HelloTrigger> = listOf(),
+    /** This bot's own greeting phrases, on top of the shared `defaults.hello_triggers` every bot also recognizes. */
+    val helloTriggersAdd: List<HelloTrigger> = listOf(),
     val transform: TransformConfig = TransformConfig(),
     val moods: List<MoodConfig> = listOf(),
     val activeMood: String? = null,

@@ -235,6 +235,7 @@ data class CommonConfigDetailDto(
     val calloutWords: List<String>,
     val forbiddenWords: List<String>,
     val calloutResponseOverrides: Map<String, String>,
+    val helloTriggers: List<HelloTriggerDetailDto>,
 )
 
 fun CommonConfigDetail.toDto() = CommonConfigDetailDto(
@@ -242,4 +243,5 @@ fun CommonConfigDetail.toDto() = CommonConfigDetailDto(
     calloutWords = calloutWords,
     forbiddenWords = forbiddenWords,
     calloutResponseOverrides = calloutResponseOverrides,
+    helloTriggers = helloTriggers.map { it.toDto() },
 )

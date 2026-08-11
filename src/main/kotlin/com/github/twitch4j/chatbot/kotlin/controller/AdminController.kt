@@ -74,12 +74,13 @@ data class BotConfigDetail(
     val prompts: PromptsDetail,
 )
 
-/** The shared words/users every bot recognizes alike, on top of whatever it adds itself - see [CommonConfig]. */
+/** The shared words/users/greetings every bot recognizes alike, on top of whatever it adds itself - see [CommonConfig]. */
 data class CommonConfigDetail(
     val excludedUsers: List<String>,
     val calloutWords: List<String>,
     val forbiddenWords: List<String>,
     val calloutResponseOverrides: Map<String, String>,
+    val helloTriggers: List<HelloTriggerDetail>,
 )
 
 /**
@@ -90,8 +91,8 @@ data class CommonConfigDetail(
  * unit-testable with the same MockK pattern `ConfiguredPersonalityTest` already uses.
  *
  * Config mutations (excluded users, callout/forbidden words, callout response overrides,
- * message length, similarity threshold, active mood, cooldown durations, minimum messages
- * between) all edit the live [com.github.twitch4j.chatbot.kotlin.core.BotDefinition]/
+ * hello triggers, message length, similarity threshold, active mood, cooldown durations,
+ * minimum messages between) all edit the live [com.github.twitch4j.chatbot.kotlin.core.BotDefinition]/
  * [com.github.twitch4j.chatbot.kotlin.core.Cooldowns] a bot is already running with -
  * `ProcessedEvent`/`ConfiguredPersonality` read those fields fresh on every dispatch, so
  * changes apply to the very next message. [commonConfig] mutations work the same way but
@@ -446,6 +447,7 @@ class AdminController(
         calloutWords = commonConfig.calloutWords,
         forbiddenWords = commonConfig.forbiddenWords,
         calloutResponseOverrides = commonConfig.calloutResponseOverrides,
+        helloTriggers = commonConfig.helloTriggers.map(::toHelloTriggerDetail),
     )
 
     fun addCommonExcludedUser(user: String): Boolean {
@@ -502,6 +504,28 @@ class AdminController(
     fun removeCommonCalloutResponseOverride(word: String): Boolean {
         commonConfig.calloutResponseOverrides = commonConfig.calloutResponseOverrides - word.trim().lowercase()
         logCommonConfigChange("callout response override removed: $word")
+        return true
+    }
+
+    fun addCommonHelloTrigger(matchType: String, value: String, alsoContains: String? = null): Boolean {
+        val trigger = buildHelloTrigger(matchType, value, alsoContains) ?: return false
+        commonConfig.helloTriggers = commonConfig.helloTriggers + trigger
+        logCommonConfigChange("hello trigger added: $matchType \"$value\"")
+        return true
+    }
+
+    fun updateCommonHelloTrigger(index: Int, matchType: String, value: String, alsoContains: String? = null): Boolean {
+        if (index !in commonConfig.helloTriggers.indices) return false
+        val trigger = buildHelloTrigger(matchType, value, alsoContains) ?: return false
+        commonConfig.helloTriggers = commonConfig.helloTriggers.toMutableList().also { it[index] = trigger }
+        logCommonConfigChange("hello trigger #$index updated: $matchType \"$value\"")
+        return true
+    }
+
+    fun removeCommonHelloTrigger(index: Int): Boolean {
+        if (index !in commonConfig.helloTriggers.indices) return false
+        commonConfig.helloTriggers = commonConfig.helloTriggers.toMutableList().also { it.removeAt(index) }
+        logCommonConfigChange("hello trigger #$index removed")
         return true
     }
 

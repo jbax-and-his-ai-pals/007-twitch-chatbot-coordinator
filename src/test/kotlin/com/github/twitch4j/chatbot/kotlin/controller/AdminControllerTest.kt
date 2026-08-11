@@ -611,6 +611,7 @@ class AdminControllerTest {
         assertTrue(initial.calloutWords.isEmpty())
         assertTrue(initial.forbiddenWords.isEmpty())
         assertTrue(initial.calloutResponseOverrides.isEmpty())
+        assertTrue(initial.helloTriggers.isEmpty())
     }
 
     @Test
@@ -673,6 +674,62 @@ class AdminControllerTest {
 
         assertTrue(admin.removeCommonCalloutResponseOverride("turkey"))
         assertFalse(admin.commonConfig().calloutResponseOverrides.containsKey("turkey"))
+    }
+
+    @Test
+    fun `addCommonHelloTrigger appends a structured trigger visible in commonConfig`() {
+        assertTrue(admin.addCommonHelloTrigger("ends_with", "yo {ref}", "hey"))
+
+        val added = admin.commonConfig().helloTriggers.last()
+        assertEquals("ends_with", added.matchType)
+        assertEquals("yo {ref}", added.value)
+        assertEquals("hey", added.alsoContains)
+    }
+
+    @Test
+    fun `addCommonHelloTrigger rejects an unknown match type or blank value`() {
+        assertFalse(admin.addCommonHelloTrigger("not-a-type", "hi {ref}"))
+        assertFalse(admin.addCommonHelloTrigger("starts_with", "   "))
+    }
+
+    @Test
+    fun `updateCommonHelloTrigger replaces the trigger at that index only`() {
+        admin.addCommonHelloTrigger("contains", "yo")
+        val before = admin.commonConfig().helloTriggers
+        val targetIndex = before.size - 1
+
+        assertTrue(admin.updateCommonHelloTrigger(targetIndex, "ends_with", "sup {ref}"))
+
+        val after = admin.commonConfig().helloTriggers
+        assertEquals(before.size, after.size)
+        assertEquals("ends_with", after[targetIndex].matchType)
+        assertEquals("sup {ref}", after[targetIndex].value)
+    }
+
+    @Test
+    fun `updateCommonHelloTrigger and removeCommonHelloTrigger reject an out-of-range index`() {
+        assertFalse(admin.updateCommonHelloTrigger(99, "contains", "x"))
+        assertFalse(admin.removeCommonHelloTrigger(99))
+    }
+
+    @Test
+    fun `removeCommonHelloTrigger removes exactly the targeted trigger`() {
+        admin.addCommonHelloTrigger("contains", "yo")
+        val sizeBefore = admin.commonConfig().helloTriggers.size
+
+        assertTrue(admin.removeCommonHelloTrigger(0))
+
+        assertEquals(sizeBefore - 1, admin.commonConfig().helloTriggers.size)
+    }
+
+    @Test
+    fun `a hello trigger added only to common config triggers a hello-back for a bot with no matching per-bot trigger`() {
+        admin.addCommonHelloTrigger("contains", "yo {ref}")
+
+        admin.simulateMessage(user = "someviewer", message = "well yo buttsbot how are ya")
+
+        val outgoing = admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>()
+        assertTrue(outgoing.any { it.botKey == "buttsbot" }, "expected the common hello trigger to fire, got: $outgoing")
     }
 
     @Test

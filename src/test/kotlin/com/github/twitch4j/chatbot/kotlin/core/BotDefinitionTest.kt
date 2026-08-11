@@ -47,6 +47,18 @@ class BotDefinitionTest {
     }
 
     @Test
+    fun `resolved hello triggers hold only this bot's own additions, same as the word lists`() {
+        val raw = RawBotConfig(
+            accountUsername = "grumblebot",
+            triggerKeywords = listOf("grumblebot"),
+            helloTriggersAdd = listOf(HelloTrigger(startsWith = "yo {ref}")),
+        )
+        val bot = BotDefinition.resolve("grumblebot", raw, defaults)
+
+        assertEquals(listOf(HelloTrigger(startsWith = "yo {ref}")), bot.helloTriggers)
+    }
+
+    @Test
     fun `always excludes its own account regardless of what it adds`() {
         val raw = RawBotConfig(accountUsername = "grumblebot", triggerKeywords = listOf("grumblebot"))
         val bot = BotDefinition.resolve("grumblebot", raw, defaults)

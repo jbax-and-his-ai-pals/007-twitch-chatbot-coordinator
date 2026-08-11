@@ -481,7 +481,7 @@ body {
   padding: 6px 8px;
   font-size: 12px;
 }
-.config-add-form button, .config-numfields button {
+.config-add-form button {
   background: var(--panel-alt);
   border: 1px solid var(--border);
   color: var(--text);
@@ -491,7 +491,11 @@ body {
   font-size: 12px;
   white-space: nowrap;
 }
-.config-add-form button:hover, .config-numfields button:hover { border-color: var(--accent); color: var(--accent); }
+.config-add-form button:hover { border-color: var(--accent); color: var(--accent); }
+
+.config-numfields input.cfg-num:focus { outline: none; border-color: var(--accent); }
+
+.autosave-flash { border-color: var(--green) !important; transition: border-color 0.6s ease; }
 
 .config-numfields { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
 .config-numfields label { display: flex; align-items: center; gap: 4px; }

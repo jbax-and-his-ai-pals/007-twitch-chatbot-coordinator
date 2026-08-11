@@ -102,6 +102,18 @@ defaults:
         retry_ms: 0
         request_ms: 30000
 
+    # Greeting phrases every bot recognizes, on top of whatever each bot adds via its own
+    # `hello_triggers_add` below - editable live from the GUI's "Common configuration" panel,
+    # same as the word/user lists above. {ref} expands to every way a bot can be addressed
+    # (each of its trigger_keywords, bare and "@"-prefixed).
+    hello_triggers:
+        - starts_with: "hi {ref}"
+        - starts_with: "hi, {ref}"
+        - starts_with: "hey {ref}"
+        - starts_with: "hey, {ref}"
+        - starts_with: "hello {ref}"
+        - starts_with: "hello, {ref}"
+
 bots:
     blampbot:
         account_username: "blampbot"
@@ -122,13 +134,8 @@ bots:
                 interval_maximum_ms: 490000
                 minimum_messages_between: 20
 
-        hello_triggers:
-            - starts_with: "hi {ref}"
-            - starts_with: "hi, {ref}"
-            - starts_with: "hey {ref}"
-            - starts_with: "hey, {ref}"
-            - starts_with: "hello {ref}"
-            - starts_with: "hello, {ref}"
+        # Blampbot's own greetings, on top of the shared set in defaults.hello_triggers above.
+        hello_triggers_add:
             - starts_with: "good evening, {ref}"
             - starts_with: "good evening {ref}"
             - starts_with: "hey there {ref}"
@@ -183,7 +190,10 @@ bots:
                 interval_maximum_ms: 360000
                 minimum_messages_between: 20
 
-        hello_triggers:
+        # Buttsbot's own greetings, on top of the shared set in defaults.hello_triggers above -
+        # "contains" instead of "starts_with" so a greeting works mid-message too, plus one
+        # combo trigger the shared set doesn't cover.
+        hello_triggers_add:
             - contains: "hi, {ref}"
             - contains: "hello, {ref}"
             - contains: "hi {ref}"
@@ -235,8 +245,8 @@ bots:
 #         credentials: { irc: "..." }
 #         cooldowns:
 #             mainline: { start_delay_ms: 300000, interval_minimum_ms: 300000, interval_maximum_ms: 450000 }
-#         hello_triggers:
-#             - starts_with: "hi {ref}"        # {ref} expands to every keyword, bare and "@"-prefixed
+#         hello_triggers_add:                  # on top of the shared defaults.hello_triggers above
+#             - starts_with: "yo {ref}"        # {ref} expands to every keyword, bare and "@"-prefixed
 #         transform:
 #             words: ["grumble"]
 #             self_quote_marker: "grumblified"

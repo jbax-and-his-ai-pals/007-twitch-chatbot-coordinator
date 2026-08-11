@@ -281,6 +281,39 @@ class ConfiguredPersonalityTest {
     }
 
     @Test
+    fun `a hello trigger defined only in CommonConfig still triggers the hello-back path`() {
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(triggerKeywords = listOf("buttsbot"), helloTriggers = listOf()),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(fakeAI),
+            commonConfig = CommonConfig(helloTriggers = listOf(HelloTrigger(startsWith = "hi {ref}"))),
+        )
+
+        val intent = dispatch(p, eventFrom("hi buttsbot"))
+
+        assertTrue(intent is PersonalityIntent.Secondary)
+        verify { chat.sendMessage("testchannel", any()) }
+    }
+
+    @Test
+    fun `a bot's own hello trigger still works alongside CommonConfig's, as a superset`() {
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(triggerKeywords = listOf("buttsbot"), helloTriggers = listOf(HelloTrigger(contains = "yo {ref}"))),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(fakeAI),
+            commonConfig = CommonConfig(helloTriggers = listOf(HelloTrigger(startsWith = "hi {ref}"))),
+        )
+
+        dispatch(p, eventFrom("hi buttsbot"))
+        verify { chat.sendMessage("testchannel", any()) }
+
+        dispatch(p, eventFrom("well yo buttsbot how's it going"))
+        verify(exactly = 2) { chat.sendMessage("testchannel", any()) }
+    }
+
+    @Test
     fun `a forbidden word defined only in CommonConfig blocks an otherwise-eligible message`() {
         val p = ConfiguredPersonality(
             bot = testBotDefinition(triggerKeywords = listOf("buttsbot")),

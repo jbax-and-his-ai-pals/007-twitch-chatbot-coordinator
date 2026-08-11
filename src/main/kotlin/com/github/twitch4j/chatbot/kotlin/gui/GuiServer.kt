@@ -324,6 +324,28 @@ fun Application.guiModule(admin: AdminController) {
                 delete("/callout-overrides/{value}") {
                     respondOk(admin.removeCommonCalloutResponseOverride(call.parameters["value"]!!))
                 }
+
+                post("/hello-triggers") {
+                    val body = call.receive<HelloTriggerRequestDto>()
+                    respondOk(admin.addCommonHelloTrigger(body.matchType, body.value, body.alsoContains))
+                }
+                post("/hello-triggers/{index}") {
+                    val index = call.parameters["index"]?.toIntOrNull()
+                    if (index == null) {
+                        call.respond(HttpStatusCode.BadRequest)
+                        return@post
+                    }
+                    val body = call.receive<HelloTriggerRequestDto>()
+                    respondOk(admin.updateCommonHelloTrigger(index, body.matchType, body.value, body.alsoContains))
+                }
+                delete("/hello-triggers/{index}") {
+                    val index = call.parameters["index"]?.toIntOrNull()
+                    if (index == null) {
+                        call.respond(HttpStatusCode.BadRequest)
+                        return@delete
+                    }
+                    respondOk(admin.removeCommonHelloTrigger(index))
+                }
             }
         }
 
