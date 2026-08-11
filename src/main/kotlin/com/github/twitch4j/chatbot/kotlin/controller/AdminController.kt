@@ -170,7 +170,7 @@ class AdminController(
         activityBus.publish(ActivityEvent.Incoming(channel = resolvedChannel, user = user, message = message, simulated = true))
 
         val event = buildSimulatedEvent(resolvedChannel, user, message)
-        MessageDispatcher.dispatch(personalities, event, Scheduler::pickMainlineActors)
+        MessageDispatcher.dispatch(personalities, event, Scheduler::pickActor)
         return true
     }
 

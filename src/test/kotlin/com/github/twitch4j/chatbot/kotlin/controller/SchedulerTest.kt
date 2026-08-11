@@ -8,8 +8,8 @@ import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
 import com.github.twitch4j.chatbot.kotlin.core.testBotDefinition
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 private class StubPersonality(override val name: String) : Personality {
@@ -25,37 +25,32 @@ private class StubPersonality(override val name: String) : Personality {
 }
 
 class SchedulerTest {
-    private val originalProbability = Scheduler.bothActProbability
     private val a = StubPersonality("a")
     private val b = StubPersonality("b")
 
-    @AfterEach
-    fun restoreProbability() {
-        Scheduler.bothActProbability = originalProbability
+    @Test
+    fun `zero candidates yields null`() {
+        assertNull(Scheduler.pickActor(emptyList()))
     }
 
     @Test
-    fun `zero candidates yields an empty list`() {
-        assertEquals(emptyList<Personality>(), Scheduler.pickMainlineActors(emptyList()))
-    }
-
-    @Test
-    fun `a single candidate always acts, regardless of probability`() {
-        Scheduler.bothActProbability = 0.0
-        assertEquals(listOf(a), Scheduler.pickMainlineActors(listOf(a)))
-    }
-
-    @Test
-    fun `zero probability always picks exactly one of multiple candidates`() {
-        Scheduler.bothActProbability = 0.0
-        repeat(50) {
-            assertEquals(1, Scheduler.pickMainlineActors(listOf(a, b)).size)
+    fun `a single candidate always wins`() {
+        repeat(20) {
+            assertTrue(Scheduler.pickActor(listOf(a)) === a)
         }
     }
 
     @Test
-    fun `probability of one forces every candidate to act`() {
-        Scheduler.bothActProbability = 1.0
-        assertEquals(listOf(a, b), Scheduler.pickMainlineActors(listOf(a, b)))
+    fun `exactly one of multiple candidates is picked, never more`() {
+        repeat(50) {
+            val picked = Scheduler.pickActor(listOf(a, b))
+            assertTrue(picked === a || picked === b)
+        }
+    }
+
+    @Test
+    fun `both candidates get picked over enough repetitions, proving it's not always the same one`() {
+        val picks = (1..200).map { Scheduler.pickActor(listOf(a, b)) }.toSet()
+        assertTrue(picks.containsAll(setOf(a, b)), "expected both candidates to win at least once across 200 picks")
     }
 }

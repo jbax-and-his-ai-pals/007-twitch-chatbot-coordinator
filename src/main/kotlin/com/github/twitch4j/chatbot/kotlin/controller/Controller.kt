@@ -21,10 +21,9 @@ import com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI
 
 /**
  * Runs an arbitrary number of bot identities, defined entirely by `config.yaml`, against
- * a single shared chat pipeline via [MessageDispatcher] - each bot's eligibility/secondary
- * triggers are evaluated independently (unchanged from how each bot behaved standalone),
- * and the mainline transform is arbitrated by [Scheduler] so bots don't act on the same
- * message except rarely.
+ * a single shared chat pipeline via [MessageDispatcher] - each bot's eligibility/intent is
+ * evaluated independently, then [Scheduler] arbitrates so at most one bot ever acts on the
+ * same incoming message.
  *
  * Also wires up everything the GUI control panel needs: a shared [ActivityBus] every bot
  * publishes chat/AI activity to, a shared [MockModeState] so the GUI's mock-mode switch
@@ -106,7 +105,7 @@ class Controller(private val configuration: Configuration) {
     private fun dispatch(event: ChannelMessageEvent) {
         Messaging.message("${event.channel.name} - ${event.user.name} - \"${event.message}\"")
         activityBus.publish(ActivityEvent.Incoming(channel = event.channel.name, user = event.user.name, message = event.message))
-        MessageDispatcher.dispatch(personalities, event, Scheduler::pickMainlineActors)
+        MessageDispatcher.dispatch(personalities, event, Scheduler::pickActor)
     }
 
     private fun createClient(bot: BotDefinition): ITwitchClient {

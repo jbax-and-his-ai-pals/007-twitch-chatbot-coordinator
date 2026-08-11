@@ -680,8 +680,28 @@ class AdminControllerTest {
 
         admin.simulateMessage(user = "someviewer", message = "hey blampbot, turkey time")
 
+        // A common callout word matches both bots (neither has "turkey" in its own per-bot
+        // list), so the coordinator may pick either one - assert the callout fired exactly
+        // once rather than pinning to a specific bot key.
         val outgoing = admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>()
-        assertTrue(outgoing.any { it.botKey == "blampbot" && it.message == "TOIKEY!" }, "expected the common callout to fire, got: $outgoing")
+        assertEquals(1, outgoing.count { it.message == "TOIKEY!" }, "expected the common callout to fire exactly once, got: $outgoing")
+    }
+
+    @Test
+    fun `a message matching a shared common callout word never triggers more than one bot`() {
+        // Neither bot has "turkey" in its own calloutWords, so before common config this
+        // word would never match either bot's callout path - now that it's shared, both
+        // bots independently detect the callout for the same message and both would have
+        // fired their own response pre-coordinator. The coordination layer must cap this
+        // at exactly one responder, never both.
+        admin.addCommonCalloutWord("turkey")
+        admin.setCommonCalloutResponseOverride("turkey", "TOIKEY!")
+
+        admin.simulateMessage(user = "someviewer", message = "turkey time again")
+
+        val outgoing = admin.recentActivity().filterIsInstance<ActivityEvent.Outgoing>()
+        assertEquals(1, outgoing.size, "expected exactly one bot to respond, got: $outgoing")
+        assertEquals("TOIKEY!", outgoing.single().message)
     }
 
     @Test

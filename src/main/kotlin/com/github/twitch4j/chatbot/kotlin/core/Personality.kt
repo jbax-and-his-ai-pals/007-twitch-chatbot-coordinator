@@ -5,10 +5,9 @@ import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 
 /**
  * What a personality wants to do with a given message, decided independently of every
- * other personality. [Secondary] triggers (callout/wisdom/hello/yes-no-why/etc) fire
- * immediately and independently, exactly as they did when each bot ran standalone.
- * [Mainline] (the blamp/butt transform) is gated by the Scheduler so both personalities
- * don't fire on the same message except rarely.
+ * other personality. [MessageDispatcher] then coordinates across every personality's
+ * intent so at most one of them actually acts per message - see its doc comment for the
+ * secondary-over-mainline priority and arbitration rules.
  */
 sealed interface PersonalityIntent {
     data object None : PersonalityIntent

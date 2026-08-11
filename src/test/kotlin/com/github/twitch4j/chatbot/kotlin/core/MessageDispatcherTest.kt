@@ -6,6 +6,7 @@ import com.github.twitch4j.common.events.domain.EventUser
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -40,56 +41,116 @@ class MessageDispatcherTest {
     }
 
     @Test
-    fun `secondary intents fire their action immediately`() {
+    fun `a lone secondary candidate fires its action`() {
         var fired = false
         val personality = FakePersonality("a", PersonalityIntent.Secondary { fired = true })
 
-        MessageDispatcher.dispatch(listOf(personality), event(), pickMainlineActors = { it })
+        MessageDispatcher.dispatch(listOf(personality), event(), pickActor = { it.firstOrNull() })
 
         assertTrue(fired)
-        assertTrue(!personality.mainlineActed)
+        assertFalse(personality.mainlineActed)
     }
 
     @Test
-    fun `None intents do nothing, and pickMainlineActors sees an empty candidate list`() {
+    fun `None intents do nothing, and pickActor sees an empty candidate list`() {
         val personality = FakePersonality("a", PersonalityIntent.None)
         var seenCandidates: List<Personality>? = null
 
-        MessageDispatcher.dispatch(listOf(personality), event(), pickMainlineActors = { candidates ->
+        MessageDispatcher.dispatch(listOf(personality), event(), pickActor = { candidates ->
             seenCandidates = candidates
-            candidates
+            candidates.firstOrNull()
         })
 
         assertEquals(emptyList<Personality>(), seenCandidates)
-        assertTrue(!personality.mainlineActed)
+        assertFalse(personality.mainlineActed)
     }
 
     @Test
-    fun `mainline candidates are handed to pickMainlineActors and only its result acts`() {
+    fun `a lone mainline candidate is handed to pickActor and acts if chosen`() {
+        val a = FakePersonality("a", PersonalityIntent.Mainline)
+        var seenCandidates: List<Personality>? = null
+
+        MessageDispatcher.dispatch(listOf(a), event(), pickActor = { candidates ->
+            seenCandidates = candidates
+            candidates.firstOrNull()
+        })
+
+        assertEquals(listOf(a), seenCandidates)
+        assertTrue(a.mainlineActed)
+    }
+
+    @Test
+    fun `pickActor returning null means nobody acts, even with one mainline candidate`() {
+        val a = FakePersonality("a", PersonalityIntent.Mainline)
+
+        MessageDispatcher.dispatch(listOf(a), event(), pickActor = { null })
+
+        assertFalse(a.mainlineActed)
+    }
+
+    @Test
+    fun `multiple mainline candidates are handed to pickActor and only its result acts`() {
         val a = FakePersonality("a", PersonalityIntent.Mainline)
         val b = FakePersonality("b", PersonalityIntent.Mainline)
         var seenCandidates: List<Personality>? = null
 
-        MessageDispatcher.dispatch(listOf(a, b), event(), pickMainlineActors = { candidates ->
+        MessageDispatcher.dispatch(listOf(a, b), event(), pickActor = { candidates ->
             seenCandidates = candidates
-            listOf(a) // only "a" gets to act, mirroring Scheduler picking a single actor
+            a // only "a" gets to act, mirroring Scheduler picking a single actor
         })
 
         assertEquals(listOf(a, b), seenCandidates)
         assertTrue(a.mainlineActed)
-        assertTrue(!b.mainlineActed)
+        assertFalse(b.mainlineActed)
     }
 
     @Test
-    fun `secondary and mainline personalities are independent of each other`() {
+    fun `a secondary candidate takes priority over a mainline candidate - only one of them acts`() {
         var secondaryFired = false
         val secondaryOnly = FakePersonality("secondary", PersonalityIntent.Secondary { secondaryFired = true })
         val mainlineOnly = FakePersonality("mainline", PersonalityIntent.Mainline)
+        var seenByPickActor: List<Personality>? = null
 
-        MessageDispatcher.dispatch(listOf(secondaryOnly, mainlineOnly), event(), pickMainlineActors = { it })
+        MessageDispatcher.dispatch(listOf(secondaryOnly, mainlineOnly), event(), pickActor = { candidates ->
+            seenByPickActor = candidates
+            candidates.firstOrNull()
+        })
 
+        // pickActor is only ever offered the secondary candidate - the mainline one never
+        // even gets to compete, since an explicit trigger outranks an incidental one.
+        assertEquals(listOf(secondaryOnly), seenByPickActor)
         assertTrue(secondaryFired)
-        assertTrue(mainlineOnly.mainlineActed)
-        assertTrue(!secondaryOnly.mainlineActed)
+        assertFalse(mainlineOnly.mainlineActed)
+    }
+
+    @Test
+    fun `multiple secondary candidates are arbitrated down to exactly one action firing`() {
+        var aFired = false
+        var bFired = false
+        val a = FakePersonality("a", PersonalityIntent.Secondary { aFired = true })
+        val b = FakePersonality("b", PersonalityIntent.Secondary { bFired = true })
+        var seenByPickActor: List<Personality>? = null
+
+        MessageDispatcher.dispatch(listOf(a, b), event(), pickActor = { candidates ->
+            seenByPickActor = candidates
+            b
+        })
+
+        assertEquals(listOf(a, b), seenByPickActor)
+        assertFalse(aFired)
+        assertTrue(bFired)
+    }
+
+    @Test
+    fun `pickActor returning null on multiple secondary candidates means nobody acts`() {
+        var aFired = false
+        var bFired = false
+        val a = FakePersonality("a", PersonalityIntent.Secondary { aFired = true })
+        val b = FakePersonality("b", PersonalityIntent.Secondary { bFired = true })
+
+        MessageDispatcher.dispatch(listOf(a, b), event(), pickActor = { null })
+
+        assertFalse(aFired)
+        assertFalse(bFired)
     }
 }
