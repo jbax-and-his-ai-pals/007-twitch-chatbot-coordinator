@@ -15,9 +15,11 @@ import com.github.twitch4j.chatbot.kotlin.core.MessageDispatcher
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.Personality
+import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
 import com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI
+import java.io.File
 
 /**
  * Runs an arbitrary number of bot identities, defined entirely by `config.yaml`, against
@@ -69,6 +71,8 @@ class Controller(private val configuration: Configuration) {
         )
     }
 
+    private val statePersistence = StatePersistence(File("data/state.json"))
+
     /** Network-free facade for the GUI control panel - see [AdminController]. */
     val admin: AdminController = AdminController(
         personalities = personalities,
@@ -77,7 +81,15 @@ class Controller(private val configuration: Configuration) {
         mockModeState = mockModeState,
         mockAiClient = mockAiClient,
         commonConfig = commonConfig,
+        statePersistence = statePersistence,
     )
+
+    init {
+        // Restore whatever was tuned through the GUI last time, before any real message can
+        // be dispatched - see AdminController.applyPersistedState. No-op on first run, or if
+        // nothing's been saved yet (statePersistence.load() returns null).
+        statePersistence.load()?.let { admin.applyPersistedState(it) }
+    }
 
     fun start() {
         // Every client needs to join the channel(s) under its own account so it can send

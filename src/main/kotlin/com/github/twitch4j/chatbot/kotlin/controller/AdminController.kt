@@ -17,6 +17,13 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.Personality
+import com.github.twitch4j.chatbot.kotlin.core.PersistedBotState
+import com.github.twitch4j.chatbot.kotlin.core.PersistedCommonState
+import com.github.twitch4j.chatbot.kotlin.core.PersistedHelloTrigger
+import com.github.twitch4j.chatbot.kotlin.core.PersistedPrompts
+import com.github.twitch4j.chatbot.kotlin.core.PersistedState
+import com.github.twitch4j.chatbot.kotlin.core.PersistedTransformWord
+import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.TransformWord
 import com.github.twitch4j.common.events.domain.EventChannel
 import com.github.twitch4j.common.events.domain.EventUser
@@ -104,10 +111,11 @@ data class CommonConfigDetail(
  * [com.github.twitch4j.chatbot.kotlin.core.Cooldowns] a bot is already running with -
  * `ProcessedEvent`/`ConfiguredPersonality` read those fields fresh on every dispatch, so
  * changes apply to the very next message. [commonConfig] mutations work the same way but
- * apply to every bot at once. They're all session-only: nothing is written back to
- * `config.yaml`, so a restart reverts to the file (re-serializing YAML would strip its
- * comments/formatting, which felt like the wrong trade for a "tune while testing" tool).
- * `api`/`credentials` are never exposed or mutable through this class - they're secrets.
+ * apply to every bot at once. Nothing is written back to `config.yaml` itself (re-serializing
+ * YAML would strip its comments/formatting) - instead, every mutation also saves to
+ * [statePersistence] if one was given, so a restart restores GUI tuning instead of reverting
+ * to the file; see [applyPersistedState]. `api`/`credentials` are never exposed or mutable
+ * through this class - they're secrets.
  */
 class AdminController(
     private val personalities: List<Personality>,
@@ -116,6 +124,7 @@ class AdminController(
     private val mockModeState: MockModeState,
     private val mockAiClient: MockAIClient,
     private val commonConfig: CommonConfig,
+    private val statePersistence: StatePersistence? = null,
 ) {
     private val personalityByKey = personalities.associateBy { it.name }
     private val disabledBots = mutableSetOf<String>()
@@ -496,6 +505,97 @@ class AdminController(
     /** Routed through Messaging (not straight to activityBus) so config changes show up in the same debug-log stream as everything else. */
     private fun logConfigChange(botKey: String, description: String) {
         Messaging.info("[$botKey] CONFIG: $description")
+        persistState()
+    }
+
+    // ---- Persistence: survive a restart, independent of config.yaml --------------------
+
+    /** No-op if persistence wasn't enabled (e.g. in tests that don't pass a [statePersistence]). */
+    private fun persistState() {
+        val persistence = statePersistence ?: return
+        val bots = personalities.associate { it.name to buildPersistedBotState(it.name) }
+        persistence.save(PersistedState(bots = bots, common = buildPersistedCommonState()))
+    }
+
+    private fun buildPersistedBotState(botKey: String): PersistedBotState {
+        val config = botConfig(botKey)!!
+        val cooldowns = personalityByKey.getValue(botKey).cooldownSnapshot()
+        return PersistedBotState(
+            excludedUsers = config.excludedUsers.toSet(),
+            calloutWords = config.calloutWords,
+            forbiddenWords = config.forbiddenWords,
+            calloutResponseOverrides = config.calloutResponseOverrides,
+            helloTriggers = config.helloTriggers.map { it.toPersisted() },
+            messageLengthMinimum = config.messageLengthMinimum,
+            messageLengthMaximum = config.messageLengthMaximum,
+            similarityThreshold = config.similarityThreshold,
+            activeMood = config.activeMood,
+            transformWords = config.transformWords.map { PersistedTransformWord(it.word, it.weight) },
+            selfQuoteMarker = config.selfQuoteMarker,
+            prompts = PersistedPrompts(config.prompts.voice, config.prompts.transform, config.prompts.wisdom, config.prompts.request),
+            minimumMessagesBetween = config.minimumMessagesBetween,
+            wisdomCooldownMs = cooldowns.wisdom.configuredMs,
+            calloutCooldownMs = cooldowns.callout.configuredMs,
+            retryCooldownMs = cooldowns.retry.configuredMs,
+            requestCooldownMs = cooldowns.request.configuredMs,
+            mainlineIntervalMinimumMs = cooldowns.mainlineIntervalMinimumMs,
+            mainlineIntervalMaximumMs = cooldowns.mainlineIntervalMaximumMs,
+            enabled = isBotEnabled(botKey),
+        )
+    }
+
+    private fun buildPersistedCommonState(): PersistedCommonState {
+        val config = commonConfig()
+        return PersistedCommonState(
+            excludedUsers = config.excludedUsers.toSet(),
+            calloutWords = config.calloutWords,
+            forbiddenWords = config.forbiddenWords,
+            calloutResponseOverrides = config.calloutResponseOverrides,
+            helloTriggers = config.helloTriggers.map { it.toPersisted() },
+        )
+    }
+
+    private fun HelloTriggerDetail.toPersisted() = PersistedHelloTrigger(matchType, value, alsoContains)
+
+    /**
+     * Restores previously-persisted tuning by direct field assignment on the already-resolved
+     * [BotDefinition]/[com.github.twitch4j.chatbot.kotlin.core.Cooldowns] instances - NOT by
+     * replaying through `config.yaml`'s raw/`..._add` merge logic, since [state] already holds
+     * final, resolved values. Call once at startup, before real dispatch begins, so the very
+     * first message sees the restored config. Unknown bot keys in [state] (e.g. a bot removed
+     * from `config.yaml` since the file was written) are silently skipped.
+     */
+    fun applyPersistedState(state: PersistedState) {
+        state.bots.forEach { (botKey, persisted) ->
+            val personality = personalityByKey[botKey] ?: return@forEach
+            val bot = personality.definition
+            bot.excludedUsers = persisted.excludedUsers
+            bot.calloutWords = persisted.calloutWords
+            bot.forbiddenWords = persisted.forbiddenWords
+            bot.calloutResponseOverrides = persisted.calloutResponseOverrides
+            bot.helloTriggers = persisted.helloTriggers.mapNotNull { buildHelloTrigger(it.matchType, it.value, it.alsoContains) }
+            bot.messageLength = MessageLengthConfig(minimum = persisted.messageLengthMinimum, maximum = persisted.messageLengthMaximum)
+            bot.similarityThreshold = persisted.similarityThreshold
+            bot.moods.firstOrNull { it.name == persisted.activeMood }?.let { bot.activeMood = it }
+            bot.transform.words = persisted.transformWords.map { TransformWord(it.word, it.weight) }
+            bot.transform.selfQuoteMarker = persisted.selfQuoteMarker
+            bot.prompts.voice = persisted.prompts.voice
+            bot.prompts.transform = persisted.prompts.transform
+            bot.prompts.wisdom = persisted.prompts.wisdom
+            bot.prompts.request = persisted.prompts.request
+            bot.cooldowns.mainline.minimumMessagesBetween = persisted.minimumMessagesBetween
+            personality.setCooldownConfig(CooldownType.WISDOM, persisted.wisdomCooldownMs)
+            personality.setCooldownConfig(CooldownType.CALLOUT, persisted.calloutCooldownMs)
+            personality.setCooldownConfig(CooldownType.RETRY, persisted.retryCooldownMs)
+            personality.setCooldownConfig(CooldownType.REQUEST, persisted.requestCooldownMs)
+            personality.setMainlineIntervalBounds(persisted.mainlineIntervalMinimumMs, persisted.mainlineIntervalMaximumMs)
+            if (!persisted.enabled) disabledBots.add(botKey)
+        }
+        commonConfig.excludedUsers = state.common.excludedUsers
+        commonConfig.calloutWords = state.common.calloutWords
+        commonConfig.forbiddenWords = state.common.forbiddenWords
+        commonConfig.calloutResponseOverrides = state.common.calloutResponseOverrides
+        commonConfig.helloTriggers = state.common.helloTriggers.mapNotNull { buildHelloTrigger(it.matchType, it.value, it.alsoContains) }
     }
 
     // ---- Common config: shared across every bot ----------------------------------------
@@ -589,5 +689,6 @@ class AdminController(
 
     private fun logCommonConfigChange(description: String) {
         Messaging.info("[COMMON] CONFIG: $description")
+        persistState()
     }
 }

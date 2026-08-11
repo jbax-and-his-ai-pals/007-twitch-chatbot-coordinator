@@ -19,5 +19,8 @@ out/
 # Config files
 *.yaml
 
+# Runtime-generated state: persisted GUI tuning + cross-session activity logs
+data/
+
 # Restore possible ignores that affected the wrapper folder
 !gradle/wrapper/**

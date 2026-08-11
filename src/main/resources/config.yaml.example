@@ -1,6 +1,10 @@
 debug: false
 
 # Port the embedded GUI control panel listens on - open http://localhost:PORT once running.
+# Note: any tuning done through the GUI is saved to data/state.json and restored on the next
+# startup, taking priority over the values below - edit this file for the baseline you want
+# to start from, use the GUI for live tuning. Delete data/state.json to fall back to this
+# file again.
 gui_port: 8080
 
 # Channels - every bot account joins every channel listed here

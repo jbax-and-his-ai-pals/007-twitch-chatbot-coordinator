@@ -14,6 +14,9 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.MoodConfig
+import com.github.twitch4j.chatbot.kotlin.core.PersistedBotState
+import com.github.twitch4j.chatbot.kotlin.core.PersistedState
+import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
 import com.github.twitch4j.chatbot.kotlin.core.engine.FakeAIClient
@@ -29,6 +32,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
 
 /**
  * Exercises [AdminController] entirely without touching Twitch4J's network layer -
@@ -916,5 +920,121 @@ class AdminControllerTest {
             logs.any { log -> log.segments.any { it.text.contains("[COMMON] CONFIG") && it.text.contains("excluded user added") } },
             "expected a common-config-change log entry, got: $logs",
         )
+    }
+
+    // ---- Persistence: survives a restart, independent of config.yaml -------------------
+
+    private fun adminWithPersistence(persistence: StatePersistence): Pair<AdminController, ConfiguredPersonality> {
+        val chat: ITwitchChat = mockk(relaxed = true)
+        val client: ITwitchClient = mockk(relaxed = true)
+        every { client.chat } returns chat
+        val bus = ActivityBus()
+        val personality = ConfiguredPersonality(
+            bot = testBotDefinition(key = "blampbot", accountUsername = "blampbot", triggerKeywords = listOf("blampbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(FakeAIClient()),
+            activityBus = bus,
+        )
+        val persistedAdmin = AdminController(
+            personalities = listOf(personality),
+            clients = mapOf("blampbot" to client),
+            activityBus = bus,
+            mockModeState = MockModeState(),
+            mockAiClient = MockAIClient(),
+            commonConfig = CommonConfig(),
+            statePersistence = persistence,
+        )
+        return persistedAdmin to personality
+    }
+
+    @Test
+    fun `a mutation persists state, and does nothing when no persistence was configured`(@TempDir dir: java.io.File) {
+        // No statePersistence given (like the shared `admin` from setUp) - must not throw.
+        assertTrue(admin.addCalloutWord("blampbot", "turkey"))
+
+        val file = java.io.File(dir, "state.json")
+        val (persistedAdmin, _) = adminWithPersistence(StatePersistence(file))
+
+        assertTrue(persistedAdmin.addCalloutWord("blampbot", "turkey"))
+
+        assertTrue(file.exists())
+        val loaded = StatePersistence(file).load()!!
+        assertEquals(listOf("turkey"), loaded.bots.getValue("blampbot").calloutWords)
+    }
+
+    @Test
+    fun `applyPersistedState restores every field by direct assignment, including enabled`(@TempDir dir: java.io.File) {
+        val file = java.io.File(dir, "state.json")
+        val (persistedAdmin, _) = adminWithPersistence(StatePersistence(file))
+
+        persistedAdmin.addCalloutWord("blampbot", "turkey")
+        persistedAdmin.setCalloutResponseOverride("blampbot", "turkey", "TOIKEY!")
+        persistedAdmin.addExcludedUser("blampbot", "spammer")
+        persistedAdmin.addForbiddenWord("blampbot", "politics")
+        persistedAdmin.addHelloTrigger("blampbot", "starts_with", "hi {ref}")
+        persistedAdmin.addTransformWord("blampbot", "melon")
+        persistedAdmin.setTransformWordWeight("blampbot", "melon", 9)
+        persistedAdmin.setSelfQuoteMarker("blampbot", "melonified")
+        persistedAdmin.setPrompt("blampbot", "voice", "a pirate")
+        persistedAdmin.setMessageLength("blampbot", 5, 250)
+        persistedAdmin.setSimilarityThreshold("blampbot", 42)
+        persistedAdmin.setMinimumMessagesBetween("blampbot", 7)
+        persistedAdmin.setCooldownDuration("blampbot", CooldownType.WISDOM, 12_345L)
+        persistedAdmin.setMainlineIntervalBounds("blampbot", 1000L, 2000L)
+        persistedAdmin.setBotEnabled("blampbot", false)
+
+        // A brand-new AdminController/ConfiguredPersonality pair, as if the process restarted -
+        // starts from testBotDefinition's plain defaults, nothing persisted-related yet.
+        val (freshAdmin, _) = adminWithPersistence(StatePersistence(file))
+        val saved = StatePersistence(file).load()!!
+
+        freshAdmin.applyPersistedState(saved)
+
+        val config = freshAdmin.botConfig("blampbot")!!
+        assertEquals(listOf("turkey"), config.calloutWords)
+        assertEquals("TOIKEY!", config.calloutResponseOverrides["turkey"])
+        assertTrue(config.excludedUsers.contains("spammer"))
+        assertEquals(listOf("politics"), config.forbiddenWords)
+        assertTrue(config.helloTriggers.any { it.value == "hi {ref}" })
+        assertEquals(9, config.transformWords.single { it.word == "melon" }.weight)
+        assertEquals("melonified", config.selfQuoteMarker)
+        assertEquals("a pirate", config.prompts.voice)
+        assertEquals(5, config.messageLengthMinimum)
+        assertEquals(250, config.messageLengthMaximum)
+        assertEquals(42, config.similarityThreshold)
+        assertEquals(7, config.minimumMessagesBetween)
+        assertFalse(freshAdmin.isBotEnabled("blampbot"))
+
+        val cooldowns = freshAdmin.cooldownSnapshot("blampbot")!!
+        assertEquals(12_345L, cooldowns.wisdom.configuredMs)
+        assertEquals(1000L, cooldowns.mainlineIntervalMinimumMs)
+        assertEquals(2000L, cooldowns.mainlineIntervalMaximumMs)
+    }
+
+    @Test
+    fun `applyPersistedState restores common config too`(@TempDir dir: java.io.File) {
+        val file = java.io.File(dir, "state.json")
+        val (persistedAdmin, _) = adminWithPersistence(StatePersistence(file))
+
+        persistedAdmin.addCommonExcludedUser("nightbot")
+        persistedAdmin.addCommonCalloutWord("gabagool")
+        persistedAdmin.addCommonHelloTrigger("contains", "sup")
+
+        val (freshAdmin, _) = adminWithPersistence(StatePersistence(file))
+        freshAdmin.applyPersistedState(StatePersistence(file).load()!!)
+
+        val common = freshAdmin.commonConfig()
+        assertTrue(common.excludedUsers.contains("nightbot"))
+        assertEquals(listOf("gabagool"), common.calloutWords)
+        assertTrue(common.helloTriggers.any { it.value == "sup" })
+    }
+
+    @Test
+    fun `applyPersistedState silently skips a bot key that no longer exists`(@TempDir dir: java.io.File) {
+        val state = PersistedState(bots = mapOf("no-such-bot" to PersistedBotState()))
+        val (freshAdmin, _) = adminWithPersistence(StatePersistence(java.io.File(dir, "state.json")))
+
+        freshAdmin.applyPersistedState(state)
     }
 }
