@@ -5,6 +5,7 @@ import com.github.twitch4j.chatbot.kotlin.controller.BotStatus
 import com.github.twitch4j.chatbot.kotlin.controller.CommonConfigDetail
 import com.github.twitch4j.chatbot.kotlin.controller.HelloTriggerDetail
 import com.github.twitch4j.chatbot.kotlin.controller.PromptsDetail
+import com.github.twitch4j.chatbot.kotlin.controller.TransformWordDetail
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownStatus
@@ -149,6 +150,11 @@ data class PromptsDetailDto(val voice: String, val transform: String, val wisdom
 fun PromptsDetail.toDto() = PromptsDetailDto(voice, transform, wisdom, request)
 
 @Serializable
+data class TransformWordDetailDto(val word: String, val weight: Int)
+
+fun TransformWordDetail.toDto() = TransformWordDetailDto(word, weight)
+
+@Serializable
 data class BotConfigDetailDto(
     val key: String,
     val accountUsername: String,
@@ -165,7 +171,7 @@ data class BotConfigDetailDto(
     val activeMood: String,
     val minimumMessagesBetween: Int,
     val helloTriggers: List<HelloTriggerDetailDto>,
-    val transformWords: List<String>,
+    val transformWords: List<TransformWordDetailDto>,
     val selfQuoteMarker: String,
     val features: List<String>,
     val prompts: PromptsDetailDto,
@@ -187,7 +193,7 @@ fun BotConfigDetail.toDto() = BotConfigDetailDto(
     activeMood = activeMood,
     minimumMessagesBetween = minimumMessagesBetween,
     helloTriggers = helloTriggers.map { it.toDto() },
-    transformWords = transformWords,
+    transformWords = transformWords.map { it.toDto() },
     selfQuoteMarker = selfQuoteMarker,
     features = features,
     prompts = prompts.toDto(),
@@ -195,6 +201,9 @@ fun BotConfigDetail.toDto() = BotConfigDetailDto(
 
 @Serializable
 data class WordDto(val word: String)
+
+@Serializable
+data class WeightDto(val weight: Int)
 
 @Serializable
 data class UserDto(val user: String)

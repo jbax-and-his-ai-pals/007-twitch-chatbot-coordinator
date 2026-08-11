@@ -67,7 +67,7 @@ class TransformedMessageTest {
         val ai = GenericAI(FakeAIClient(response = "this got testworded and totally testworded again"))
         val bot = testBotDefinition(
             transform = com.github.twitch4j.chatbot.kotlin.core.TransformConfig(
-                words = listOf("TESTWORD"),
+                words = listOf(com.github.twitch4j.chatbot.kotlin.core.TransformWord("TESTWORD")),
                 selfQuoteMarker = "testworded",
             ),
         )

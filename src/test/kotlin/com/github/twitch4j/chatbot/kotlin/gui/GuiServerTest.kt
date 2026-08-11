@@ -358,6 +358,36 @@ class GuiServerTest {
     }
 
     @Test
+    fun `transform words can be added, reweighted, and removed via REST`() = testApplication {
+        val (admin, _) = adminWithOneBot()
+        application { guiModule(admin) }
+
+        val addResponse = client.post("/api/bots/blampbot/transform-words") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(WordDto.serializer(), WordDto("melon")))
+        }
+        assertEquals(HttpStatusCode.OK, addResponse.status)
+
+        var config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        assertEquals(1, config.transformWords.single { it.word == "melon" }.weight)
+
+        val weightResponse = client.post("/api/bots/blampbot/transform-words/melon/weight") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(WeightDto.serializer(), WeightDto(9)))
+        }
+        assertEquals(HttpStatusCode.OK, weightResponse.status)
+
+        config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        assertEquals(9, config.transformWords.single { it.word == "melon" }.weight)
+
+        val removeResponse = client.delete("/api/bots/blampbot/transform-words/melon")
+        assertEquals(HttpStatusCode.OK, removeResponse.status)
+
+        config = json.decodeFromString<BotConfigDetailDto>(client.get("/api/bots/blampbot/config").bodyAsText())
+        assertTrue(config.transformWords.none { it.word == "melon" })
+    }
+
+    @Test
     fun `hello triggers can be added, updated, and removed via REST`() = testApplication {
         val (admin, _) = adminWithOneBot()
         application { guiModule(admin) }

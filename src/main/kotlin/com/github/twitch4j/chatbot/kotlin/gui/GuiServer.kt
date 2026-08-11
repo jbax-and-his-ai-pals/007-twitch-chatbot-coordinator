@@ -248,6 +248,12 @@ fun Application.guiModule(admin: AdminController) {
                     val botKey = call.parameters["botKey"]!!
                     respondOk(admin.removeTransformWord(botKey, call.parameters["value"]!!))
                 }
+                post("/transform-words/{value}/weight") {
+                    val botKey = call.parameters["botKey"]!!
+                    val word = call.parameters["value"]!!
+                    val body = call.receive<WeightDto>()
+                    respondOk(admin.setTransformWordWeight(botKey, word, body.weight))
+                }
 
                 post("/self-quote-marker") {
                     val botKey = call.parameters["botKey"]!!

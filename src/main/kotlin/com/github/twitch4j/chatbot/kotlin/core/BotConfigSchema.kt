@@ -70,11 +70,19 @@ data class HelloTrigger(
     val alsoContains: String? = null,
 )
 
+/** One candidate transform word/phrase with a relative weight - a weight-3 word is picked 3x as often as a weight-1 one. */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class TransformWord(
+    val word: String,
+    val weight: Int = 1,
+)
+
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class TransformConfig(
-    /** Candidate replacement words/phrases; one is picked at random per mainline attempt. Live-editable. */
-    var words: List<String> = listOf(),
+    /** Candidate replacement words/phrases; one is picked per mainline attempt via a weighted random pick. Live-editable. */
+    var words: List<TransformWord> = listOf(),
     /** Detects the bot quoting its own past output back at itself (e.g. "blampfied"). Live-editable. */
     var selfQuoteMarker: String = "",
 )

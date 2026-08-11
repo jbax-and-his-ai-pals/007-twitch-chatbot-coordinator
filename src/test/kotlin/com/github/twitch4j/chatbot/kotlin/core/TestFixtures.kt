@@ -30,7 +30,7 @@ fun testBotDefinition(
         requestMs = 30000L,
     ),
     helloTriggers: List<HelloTrigger> = listOf(),
-    transform: TransformConfig = TransformConfig(words = listOf("TESTWORD"), selfQuoteMarker = "self-quote-marker-xyz"),
+    transform: TransformConfig = TransformConfig(words = listOf(TransformWord("TESTWORD")), selfQuoteMarker = "self-quote-marker-xyz"),
     moods: List<MoodConfig> = listOf(MoodConfig(name = "default", helloPrompt = "hi [user]")),
     activeMoodName: String? = null,
     prompts: PromptConfig = PromptConfig(voice = "", transform = "transform prompt: ", wisdom = "wisdom prompt", request = "request prompt: "),

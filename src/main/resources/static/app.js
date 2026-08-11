@@ -379,7 +379,7 @@ function configSectionHtml(botKey, config, cooldowns) {
   `;
 
   const personality = `
-    ${chipListBlockHtml("bot", botKey, "Transform words", "transform-words", "word", config.transformWords)}
+    ${transformWordsBlockHtml(botKey, config.transformWords)}
     ${editableTextBlockHtml(botKey, "Self-quote marker", "/self-quote-marker", config.selfQuoteMarker)}
     ${editableTextBlockHtml(botKey, "Prompt: voice", "/prompts/voice", config.prompts.voice, true)}
     ${editableTextBlockHtml(botKey, "Prompt: transform", "/prompts/transform", config.prompts.transform, true)}
@@ -458,22 +458,29 @@ async function refreshScoped(scope, botKey) {
   else await refreshConfigPanel(botKey);
 }
 
+/** Wraps a list-shaped config block in its own collapsible header, independent of the outer config-group's collapse state. */
+function collapsibleBlockHtml(title, innerHtml) {
+  return `
+    <div class="config-block collapsible-config-block">
+      <h4 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> ${escapeHtml(title)}</h4>
+      <div class="config-block-body">${innerHtml}</div>
+    </div>
+  `;
+}
+
 /** Chips are clickable (opens the edit modal, per-item Save/Delete) rather than carrying their own remove button. */
 function chipListBlockHtml(scope, botKey, title, listKey, fieldName, items) {
   const chips = items.map((item) => `
     <span class="chip" data-action="edit-chip" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-list="${listKey}" data-field="${fieldName}" data-value="${escapeHtml(item)}">${escapeHtml(item)}</span>
   `).join("") || `<span class="config-empty">none</span>`;
 
-  return `
-    <div class="config-block">
-      <h4>${title}</h4>
-      <div class="chip-list">${chips}</div>
-      <div class="config-add-form">
-        <input type="text" class="chip-input" placeholder="add..." />
-        <button data-action="add-chip" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-list="${listKey}" data-field="${fieldName}">Add</button>
-      </div>
+  return collapsibleBlockHtml(title, `
+    <div class="chip-list">${chips}</div>
+    <div class="config-add-form">
+      <input type="text" class="chip-input" placeholder="add..." />
+      <button data-action="add-chip" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-list="${listKey}" data-field="${fieldName}">Add</button>
     </div>
-  `;
+  `);
 }
 
 function overrideListBlockHtml(scope, botKey, overrides) {
@@ -483,17 +490,40 @@ function overrideListBlockHtml(scope, botKey, overrides) {
     </div>
   `).join("") || `<span class="config-empty">none</span>`;
 
-  return `
-    <div class="config-block">
-      <h4>Callout response overrides</h4>
-      <div class="override-list-cfg">${rows}</div>
-      <div class="config-add-form">
-        <input type="text" class="override-word-input" placeholder="word" />
-        <input type="text" class="override-response-input" placeholder="response" />
-        <button data-action="add-override" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}">Add</button>
-      </div>
+  return collapsibleBlockHtml("Callout response overrides", `
+    <div class="override-list-cfg">${rows}</div>
+    <div class="config-add-form">
+      <input type="text" class="override-word-input" placeholder="word" />
+      <input type="text" class="override-response-input" placeholder="response" />
+      <button data-action="add-override" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}">Add</button>
     </div>
-  `;
+  `);
+}
+
+/** Transform words are always per-bot (never common) - relative weights drive a weighted-random pick, sliders let you balance them, with a live-computed percentage. */
+function transformWordsBlockHtml(botKey, words) {
+  const totalWeight = words.reduce((sum, w) => sum + w.weight, 0) || 1;
+  const rows = words.map((w) => {
+    const pct = Math.round((w.weight / totalWeight) * 100);
+    return `
+      <div class="weighted-word-row">
+        <span class="weighted-word-text">${escapeHtml(w.word)}</span>
+        <input type="range" class="weighted-word-slider" min="1" max="100"
+               data-autosave="transform-word-weight" data-bot="${escapeHtml(botKey)}" data-word="${escapeHtml(w.word)}"
+               data-saved="${w.weight}" value="${w.weight}" />
+        <span class="weighted-word-pct">${pct}%</span>
+        <button data-action="remove-transform-word" data-bot="${escapeHtml(botKey)}" data-word="${escapeHtml(w.word)}" title="Remove">&times;</button>
+      </div>
+    `;
+  }).join("") || `<div class="config-empty">none</div>`;
+
+  return collapsibleBlockHtml("Transform words", `
+    <div class="weighted-words-list">${rows}</div>
+    <div class="config-add-form">
+      <input type="text" class="transform-word-input" placeholder="add word..." />
+      <button data-action="add-transform-word" data-bot="${escapeHtml(botKey)}">Add</button>
+    </div>
+  `);
 }
 
 function commonConfigSectionHtml(config) {
@@ -547,20 +577,17 @@ function helloTriggerRowHtml(scope, botKey, trigger, index) {
 
 function helloTriggersBlockHtml(scope, botKey, triggers) {
   const rows = triggers.map((t, i) => helloTriggerRowHtml(scope, botKey, t, i)).join("") || `<div class="config-empty">none</div>`;
-  return `
-    <div class="config-block">
-      <h4>Hello triggers</h4>
-      <div class="hello-triggers-list">${rows}</div>
-      <div class="hello-trigger-row hello-trigger-new">
-        <select class="hello-match-type-new">
-          ${Object.entries(MATCH_TYPE_LABELS).map(([v, label]) => `<option value="${v}">${label}</option>`).join("")}
-        </select>
-        <input type="text" class="hello-value-new" placeholder="text - use {ref} for the bot's name" />
-        <input type="text" class="hello-also-new" placeholder="also contains (optional)" />
-        <button data-action="add-hello-trigger" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}">Add</button>
-      </div>
+  return collapsibleBlockHtml("Hello triggers", `
+    <div class="hello-triggers-list">${rows}</div>
+    <div class="hello-trigger-row hello-trigger-new">
+      <select class="hello-match-type-new">
+        ${Object.entries(MATCH_TYPE_LABELS).map(([v, label]) => `<option value="${v}">${label}</option>`).join("")}
+      </select>
+      <input type="text" class="hello-value-new" placeholder="text - use {ref} for the bot's name" />
+      <input type="text" class="hello-also-new" placeholder="also contains (optional)" />
+      <button data-action="add-hello-trigger" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}">Add</button>
     </div>
-  `;
+  `);
 }
 
 async function refreshConfigPanel(botKey) {
@@ -594,8 +621,10 @@ botsPanelEl.addEventListener("click", async (e) => {
 
   switch (target.dataset.action) {
     case "toggle-section": {
-      const card = target.closest(".bot-card, .overrides-card");
-      if (card) card.classList.toggle("collapsed");
+      // Nested list blocks (excluded users, hello triggers, etc) collapse independently of
+      // the outer bot card / top-level overrides card.
+      const section = block && block.classList.contains("collapsible-config-block") ? block : target.closest(".bot-card, .overrides-card");
+      if (section) section.classList.toggle("collapsed");
       break;
     }
     case "edit-chip": {
@@ -694,6 +723,19 @@ botsPanelEl.addEventListener("click", async (e) => {
         body: JSON.stringify({ matchType, value, alsoContains: alsoContains || null }),
       });
       await refreshScoped(scope, botKey);
+      break;
+    }
+    case "remove-transform-word": {
+      await api(`/bots/${encodeURIComponent(botKey)}/transform-words/${encodeURIComponent(target.dataset.word)}`, { method: "DELETE" });
+      await refreshConfigPanel(botKey);
+      break;
+    }
+    case "add-transform-word": {
+      const input = block.querySelector(".transform-word-input");
+      const word = input.value.trim();
+      if (!word) return;
+      await api(`/bots/${encodeURIComponent(botKey)}/transform-words`, { method: "POST", body: JSON.stringify({ word }) });
+      await refreshConfigPanel(botKey);
       break;
     }
   }
@@ -802,7 +844,24 @@ botsPanelEl.addEventListener("focusout", async (e) => {
     case "hello-trigger":
       await autosaveHelloTrigger(el);
       break;
+    case "transform-word-weight":
+      await autosaveSingle(el, `/bots/${encodeURIComponent(botKey)}/transform-words/${encodeURIComponent(el.dataset.word)}/weight`, (weight) => ({ weight }));
+      break;
   }
+});
+
+/** Live percentage preview across a weighted-words block, recomputed as any slider moves (before the autosave-on-blur actually persists anything). */
+botsPanelEl.addEventListener("input", (e) => {
+  if (!e.target.classList.contains("weighted-word-slider")) return;
+  const list = e.target.closest(".weighted-words-list");
+  if (!list) return;
+
+  const rows = [...list.querySelectorAll(".weighted-word-row")];
+  const weights = rows.map((row) => Number(row.querySelector(".weighted-word-slider").value) || 0);
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
+  rows.forEach((row, i) => {
+    row.querySelector(".weighted-word-pct").textContent = `${Math.round((weights[i] / total) * 100)}%`;
+  });
 });
 
 botCardsEl.addEventListener("change", async (e) => {

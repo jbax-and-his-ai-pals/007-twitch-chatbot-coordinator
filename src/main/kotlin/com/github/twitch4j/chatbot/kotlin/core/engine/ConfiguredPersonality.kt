@@ -16,6 +16,7 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
+import kotlin.random.Random
 
 /**
  * The only [Personality] implementation now - entirely driven by a [BotDefinition].
@@ -161,7 +162,19 @@ class ConfiguredPersonality(
         )
     }
 
-    private fun pickTransformWord() = (bot.transform.words.randomOrNull() ?: bot.primaryKeyword).uppercase()
+    /** Weighted-random pick across [BotDefinition.transform]'s words - a weight-3 word is picked 3x as often as a weight-1 one. */
+    private fun pickTransformWord(): String {
+        val words = bot.transform.words
+        val totalWeight = words.sumOf { it.weight.coerceAtLeast(0) }
+        if (totalWeight <= 0) return bot.primaryKeyword.uppercase()
+
+        var roll = Random.nextInt(totalWeight)
+        for (candidate in words) {
+            roll -= candidate.weight.coerceAtLeast(0)
+            if (roll < 0) return candidate.word.uppercase()
+        }
+        return words.last().word.uppercase()
+    }
 
     private fun bePraised(event: ChannelMessageEvent) {
         Messaging.green("\tTHEY LOVE ME!")

@@ -281,6 +281,33 @@ class AdminControllerTest {
         assertEquals("default", config.activeMood)
     }
 
+    @Test
+    fun `botConfig returns list fields alphabetized, except triggerKeywords whose order is significant`() {
+        admin.addTriggerKeyword("blampbot", "zzz-alias")
+        admin.addCalloutWord("blampbot", "zebra")
+        admin.addCalloutWord("blampbot", "apple")
+        admin.addForbiddenWord("blampbot", "zebra")
+        admin.addForbiddenWord("blampbot", "apple")
+        admin.setCalloutResponseOverride("blampbot", "zebra", "Z!")
+        admin.setCalloutResponseOverride("blampbot", "apple", "A!")
+        admin.addHelloTrigger("blampbot", "contains", "zebra")
+        admin.addHelloTrigger("blampbot", "contains", "apple")
+        admin.addTransformWord("blampbot", "zebra")
+        admin.addTransformWord("blampbot", "apple")
+
+        val config = admin.botConfig("blampbot")!!
+        assertEquals(listOf("blampbot", "zzz-alias"), config.triggerKeywords, "triggerKeywords order is significant (first = primary) - must not be sorted")
+        assertEquals(listOf("apple", "zebra"), config.calloutWords)
+        assertEquals(listOf("apple", "zebra"), config.forbiddenWords)
+        assertEquals(listOf("apple", "zebra"), config.calloutResponseOverrides.keys.toList())
+        // blampbot's fixture already has a "hi {ref}" hello trigger from setUp - it sorts
+        // in between the two newly added ones.
+        assertEquals(listOf("apple", "hi {ref}", "zebra"), config.helloTriggers.map { it.value })
+        // blampbot's fixture already has a "TESTWORD" transform word from testBotDefinition's
+        // default - natural String ordering sorts uppercase before lowercase.
+        assertEquals(listOf("TESTWORD", "apple", "zebra"), config.transformWords.map { it.word })
+    }
+
     // ---- Config: write, and proof it's live (not just recorded) ------------------------
 
     @Test
@@ -522,10 +549,35 @@ class AdminControllerTest {
     @Test
     fun `addTransformWord and removeTransformWord round-trip through botConfig`() {
         assertTrue(admin.addTransformWord("blampbot", "MELON"))
-        assertTrue(admin.botConfig("blampbot")!!.transformWords.contains("melon"))
+        assertTrue(admin.botConfig("blampbot")!!.transformWords.any { it.word == "melon" })
 
         assertTrue(admin.removeTransformWord("blampbot", "melon"))
-        assertFalse(admin.botConfig("blampbot")!!.transformWords.contains("melon"))
+        assertFalse(admin.botConfig("blampbot")!!.transformWords.any { it.word == "melon" })
+    }
+
+    @Test
+    fun `addTransformWord defaults to weight 1`() {
+        admin.addTransformWord("blampbot", "melon")
+        assertEquals(1, admin.botConfig("blampbot")!!.transformWords.single { it.word == "melon" }.weight)
+    }
+
+    @Test
+    fun `setTransformWordWeight updates only the targeted word's weight`() {
+        admin.addTransformWord("blampbot", "melon")
+        admin.addTransformWord("blampbot", "grape")
+
+        assertTrue(admin.setTransformWordWeight("blampbot", "melon", 9))
+
+        val words = admin.botConfig("blampbot")!!.transformWords
+        assertEquals(9, words.single { it.word == "melon" }.weight)
+        assertEquals(1, words.single { it.word == "grape" }.weight)
+    }
+
+    @Test
+    fun `setTransformWordWeight rejects a weight below 1 or an unknown word`() {
+        admin.addTransformWord("blampbot", "melon")
+        assertFalse(admin.setTransformWordWeight("blampbot", "melon", 0))
+        assertFalse(admin.setTransformWordWeight("blampbot", "does-not-exist", 5))
     }
 
     @Test
@@ -612,6 +664,24 @@ class AdminControllerTest {
         assertTrue(initial.forbiddenWords.isEmpty())
         assertTrue(initial.calloutResponseOverrides.isEmpty())
         assertTrue(initial.helloTriggers.isEmpty())
+    }
+
+    @Test
+    fun `commonConfig returns list fields alphabetized`() {
+        admin.addCommonCalloutWord("zebra")
+        admin.addCommonCalloutWord("apple")
+        admin.addCommonForbiddenWord("zebra")
+        admin.addCommonForbiddenWord("apple")
+        admin.setCommonCalloutResponseOverride("zebra", "Z!")
+        admin.setCommonCalloutResponseOverride("apple", "A!")
+        admin.addCommonHelloTrigger("contains", "zebra")
+        admin.addCommonHelloTrigger("contains", "apple")
+
+        val config = admin.commonConfig()
+        assertEquals(listOf("apple", "zebra"), config.calloutWords)
+        assertEquals(listOf("apple", "zebra"), config.forbiddenWords)
+        assertEquals(listOf("apple", "zebra"), config.calloutResponseOverrides.keys.toList())
+        assertEquals(listOf("apple", "zebra"), config.helloTriggers.map { it.value })
     }
 
     @Test

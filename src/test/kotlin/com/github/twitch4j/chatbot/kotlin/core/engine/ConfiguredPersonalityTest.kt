@@ -13,6 +13,8 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
+import com.github.twitch4j.chatbot.kotlin.core.TransformConfig
+import com.github.twitch4j.chatbot.kotlin.core.TransformWord
 import com.github.twitch4j.chatbot.kotlin.core.testBotDefinition
 import com.github.twitch4j.common.events.domain.EventUser
 import io.mockk.every
@@ -217,6 +219,42 @@ class ConfiguredPersonalityTest {
         p.actMainline(eventFrom("just a normal chat message here"))
 
         verify { chat.sendMessage("testchannel", match { it.contains("testword", ignoreCase = true) }) }
+    }
+
+    @Test
+    fun `heavier-weighted transform words are picked proportionally more often`() {
+        val p = ConfiguredPersonality(
+            bot = testBotDefinition(
+                triggerKeywords = listOf("buttsbot"),
+                transform = TransformConfig(
+                    words = listOf(TransformWord("melon", weight = 9), TransformWord("grape", weight = 1)),
+                    selfQuoteMarker = "self-quote-marker-xyz",
+                ),
+            ),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(fakeAI),
+        )
+        // Echo back whichever word actually got picked (it appears in the preamble's "don't
+        // repeat X" instruction) so TransformedMessage.isValid's containsWord check always
+        // passes, regardless of which of the two words this particular call picked.
+        fakeAI.responseProvider = { prompt ->
+            if (prompt.contains("MELON")) "this got melon treatment nicely done" else "this got grape treatment nicely done"
+        }
+
+        // lastUser/fromLastActedUser would block a repeat from the same user, so use a
+        // distinct user per trial - actMainline is called directly (bypassing the
+        // determineIntent/cooldown gate a real dispatch would apply) purely to isolate word
+        // selection from cooldown timing.
+        repeat(100) { i -> p.actMainline(eventFrom("just a normal chat message here", userName = "user$i")) }
+
+        val melonPicks = fakeAI.prompts.count { it.contains("MELON") }
+        val grapePicks = fakeAI.prompts.count { it.contains("GRAPE") }
+        assertEquals(100, melonPicks + grapePicks)
+        // Expected ~90/~10 at a 9:1 weight ratio; >60 is many standard deviations below that,
+        // generous enough to never flake while still catching a regression to uniform-random
+        // (which would land around 50).
+        assertTrue(melonPicks > 60, "expected roughly 90% melon picks over 100 trials at a 9:1 weight, got melon=$melonPicks grape=$grapePicks")
     }
 
     @Test

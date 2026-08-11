@@ -41,7 +41,7 @@ class GenericAI(private val aiClient: AIClient = AIModel) {
     }
 
     /** The word used in the shared preamble ("don't repeat X over and over") for non-transform prompts. */
-    private fun defaultWord(bot: BotDefinition) = bot.transform.words.firstOrNull() ?: bot.primaryKeyword
+    private fun defaultWord(bot: BotDefinition) = bot.transform.words.firstOrNull()?.word ?: bot.primaryKeyword
 
     private fun generateWithRetry(prompt: String, label: String): String {
         while (true) {

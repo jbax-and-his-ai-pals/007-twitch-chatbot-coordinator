@@ -142,7 +142,15 @@ bots:
             - starts_with: "hey there, {ref}"
 
         transform:
-            words: ["blamp", "blamp", "blamp", "tits", "melons"]
+            # Relative weights, not percentages - "blamp" here is 3x as likely as "tits" or
+            # "melons" (60%/20%/20%). Also editable live via sliders in the GUI.
+            words:
+                - word: "blamp"
+                  weight: 3
+                - word: "tits"
+                  weight: 1
+                - word: "melons"
+                  weight: 1
             self_quote_marker: "blampfied"
 
         moods:
@@ -201,7 +209,9 @@ bots:
               also_contains: "{ref}"
 
         transform:
-            words: ["butt"]
+            words:
+                - word: "butt"
+                  weight: 1
             self_quote_marker: "buttified"
 
         moods:
@@ -248,7 +258,7 @@ bots:
 #         hello_triggers_add:                  # on top of the shared defaults.hello_triggers above
 #             - starts_with: "yo {ref}"        # {ref} expands to every keyword, bare and "@"-prefixed
 #         transform:
-#             words: ["grumble"]
+#             words: [{ word: "grumble", weight: 1 }]
 #             self_quote_marker: "grumblified"
 #         prompts:
 #             voice: "you're a perpetually annoyed old man who's seen it all;"

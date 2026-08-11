@@ -17,6 +17,7 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.Personality
+import com.github.twitch4j.chatbot.kotlin.core.TransformWord
 import com.github.twitch4j.common.events.domain.EventChannel
 import com.github.twitch4j.common.events.domain.EventUser
 import io.mockk.every
@@ -46,6 +47,12 @@ data class PromptsDetail(
     val request: String,
 )
 
+/** One transform word/phrase with its relative weight - see [com.github.twitch4j.chatbot.kotlin.core.TransformWord]. */
+data class TransformWordDetail(
+    val word: String,
+    val weight: Int,
+)
+
 /**
  * Everything about a bot's live, resolved config the GUI's config panel can show or edit.
  * `api`/`credentials` (secrets) are deliberately never included here. [features] is
@@ -68,7 +75,7 @@ data class BotConfigDetail(
     val activeMood: String,
     val minimumMessagesBetween: Int,
     val helloTriggers: List<HelloTriggerDetail>,
-    val transformWords: List<String>,
+    val transformWords: List<TransformWordDetail>,
     val selfQuoteMarker: String,
     val features: List<String>,
     val prompts: PromptsDetail,
@@ -198,20 +205,21 @@ class AdminController(
         return BotConfigDetail(
             key = bot.key,
             accountUsername = bot.accountUsername,
+            // Not sorted - order is significant, the first keyword is the bot's primary/canonical name.
             triggerKeywords = bot.triggerKeywords,
             channel = personality.channel,
             excludedUsers = bot.excludedUsers.sorted(),
-            calloutWords = bot.calloutWords,
-            forbiddenWords = bot.forbiddenWords,
-            calloutResponseOverrides = bot.calloutResponseOverrides,
+            calloutWords = bot.calloutWords.sorted(),
+            forbiddenWords = bot.forbiddenWords.sorted(),
+            calloutResponseOverrides = bot.calloutResponseOverrides.toSortedMap(),
             messageLengthMinimum = bot.messageLength.minimum,
             messageLengthMaximum = bot.messageLength.maximum,
             similarityThreshold = bot.similarityThreshold,
             moods = bot.moods.map { it.name },
             activeMood = bot.activeMood.name,
             minimumMessagesBetween = bot.cooldowns.mainline.minimumMessagesBetween,
-            helloTriggers = bot.helloTriggers.map(::toHelloTriggerDetail),
-            transformWords = bot.transform.words,
+            helloTriggers = bot.helloTriggers.map(::toHelloTriggerDetail).sortedBy { it.value },
+            transformWords = bot.transform.words.sortedBy { it.word }.map { TransformWordDetail(it.word, it.weight) },
             selfQuoteMarker = bot.transform.selfQuoteMarker,
             features = bot.features.map(::describeFeature),
             prompts = PromptsDetail(
@@ -376,15 +384,27 @@ class AdminController(
 
     fun addTransformWord(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
         val normalized = word.trim().lowercase()
-        if (normalized.isEmpty() || bot.transform.words.contains(normalized)) return@editBot false
-        bot.transform.words = bot.transform.words + normalized
+        if (normalized.isEmpty() || bot.transform.words.any { it.word == normalized }) return@editBot false
+        bot.transform.words = bot.transform.words + TransformWord(normalized)
         logConfigChange(botKey, "transform word added: $normalized")
         true
     }
 
     fun removeTransformWord(botKey: String, word: String): Boolean = editBot(botKey) { bot ->
-        bot.transform.words = bot.transform.words - word.trim().lowercase()
+        val normalized = word.trim().lowercase()
+        bot.transform.words = bot.transform.words.filterNot { it.word == normalized }
         logConfigChange(botKey, "transform word removed: $word")
+        true
+    }
+
+    /** [weight] is a relative weight (>= 1) in [com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality]'s weighted-random pick. */
+    fun setTransformWordWeight(botKey: String, word: String, weight: Int): Boolean = editBot(botKey) { bot ->
+        if (weight < 1) return@editBot false
+        val normalized = word.trim().lowercase()
+        val index = bot.transform.words.indexOfFirst { it.word == normalized }
+        if (index < 0) return@editBot false
+        bot.transform.words = bot.transform.words.toMutableList().also { it[index] = it[index].copy(weight = weight) }
+        logConfigChange(botKey, "transform word weight set: $normalized -> $weight")
         true
     }
 
@@ -444,10 +464,10 @@ class AdminController(
 
     fun commonConfig(): CommonConfigDetail = CommonConfigDetail(
         excludedUsers = commonConfig.excludedUsers.sorted(),
-        calloutWords = commonConfig.calloutWords,
-        forbiddenWords = commonConfig.forbiddenWords,
-        calloutResponseOverrides = commonConfig.calloutResponseOverrides,
-        helloTriggers = commonConfig.helloTriggers.map(::toHelloTriggerDetail),
+        calloutWords = commonConfig.calloutWords.sorted(),
+        forbiddenWords = commonConfig.forbiddenWords.sorted(),
+        calloutResponseOverrides = commonConfig.calloutResponseOverrides.toSortedMap(),
+        helloTriggers = commonConfig.helloTriggers.map(::toHelloTriggerDetail).sortedBy { it.value },
     )
 
     fun addCommonExcludedUser(user: String): Boolean {
