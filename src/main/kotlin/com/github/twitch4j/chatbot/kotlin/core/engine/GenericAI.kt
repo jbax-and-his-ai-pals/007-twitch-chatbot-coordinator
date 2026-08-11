@@ -1,0 +1,85 @@
+package com.github.twitch4j.chatbot.kotlin.core.engine
+
+import com.github.twitch4j.chatbot.kotlin.core.AIClient
+import com.github.twitch4j.chatbot.kotlin.core.AIModel
+import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
+
+/**
+ * Generic Gemini prompt executor, parameterized entirely by a [BotDefinition]'s
+ * `prompts`/`transform`/`moods` config. Replaces the old per-bot BlampAI/ButtsAI.
+ *
+ * Takes an [AIClient] (defaulting to the real [AIModel]) so tests can inject a fake and
+ * never hit the real API - see `FakeAIClient` in the test source set.
+ *
+ * Note: in the original two bots, only the mainline transform prompt actually resolved
+ * `{UPPER}`/`{lower}` placeholders (via an explicit `.replace(...)` at the one call site
+ * that built it) - the wisdom/request/hello-back prompts sent the literal unresolved
+ * placeholder text to Gemini. This engine resolves placeholders consistently everywhere.
+ */
+class GenericAI(private val aiClient: AIClient = AIModel) {
+    private fun preamble(name: String, word: String) =
+        "you are $name; " +
+                "when, you respond, do NOT return a string with all caps; this is a big no-no; " +
+                "don't repeat ${word.uppercase()} over and over in sequence; " +
+                "don't repeat yourself at the end of your response; " +
+                "don't trim the response endings; " +
+                "don't leave off the last letter in your responses; " +
+                "go get 'em, ace! here are your instructions: "
+
+    private fun fillPlaceholders(template: String, bot: BotDefinition, word: String) =
+        template
+            .replace("{UPPER}", word.uppercase())
+            .replace("{lower}", word.lowercase())
+            .replace("{name}", bot.primaryKeyword)
+
+    private fun buildPrompt(bot: BotDefinition, word: String, body: String): String {
+        val filledBody = fillPlaceholders(body, bot, word)
+        return listOf(preamble(bot.primaryKeyword, word), bot.prompts.voice, filledBody)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+    }
+
+    /** The word used in the shared preamble ("don't repeat X over and over") for non-transform prompts. */
+    private fun defaultWord(bot: BotDefinition) = bot.transform.words.firstOrNull() ?: bot.primaryKeyword
+
+    private fun generateWithRetry(prompt: String, label: String): String {
+        while (true) {
+            try {
+                val result = aiClient.generateContent(prompt)
+                if (result.isEmpty()) {
+                    println("\tEMPTY RESULT.")
+                } else {
+                    println("\t$label: $result")
+                    return result
+                }
+            } catch (e: Exception) {
+                println("\tERROR: ${e.message}")
+                Thread.sleep(1000)
+            }
+        }
+    }
+
+    private fun generateOnce(prompt: String): String =
+        try {
+            aiClient.generateContent(prompt)
+        } catch (e: Exception) {
+            println("\tERROR: ${e.message}.")
+            Thread.sleep(1000)
+            ""
+        }
+
+    fun transform(bot: BotDefinition, str: String, word: String): String =
+        generateOnce(buildPrompt(bot, word, bot.prompts.transform) + " \"$str\"")
+
+    fun wisdom(bot: BotDefinition): String =
+        generateWithRetry(buildPrompt(bot, defaultWord(bot), bot.prompts.wisdom), "WISDOM")
+
+    fun request(bot: BotDefinition, requestString: String): String =
+        generateWithRetry(buildPrompt(bot, defaultWord(bot), bot.prompts.request) + " \"$requestString\"", "RESPONSE")
+
+    fun helloBack(bot: BotDefinition, userName: String): String {
+        val helloPrompt = bot.activeMood.helloPrompt.replace("[user]", userName)
+        return generateOnce(buildPrompt(bot, defaultWord(bot), helloPrompt))
+    }
+}

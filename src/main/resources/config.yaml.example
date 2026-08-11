@@ -1,0 +1,236 @@
+debug: false
+
+# Channels - every bot account joins every channel listed here
+channels:
+    - "thecheeseball81"
+    - "jerbtrundles"
+
+# Shared baseline every bot inherits unless it overrides/extends a field below.
+defaults:
+    message_length:
+        minimum: 20
+        maximum: 100
+    similarity_threshold: 70
+
+    excluded_users:
+        - "nightbot"
+        - "b_a_618"
+        - "bowlymania"
+        - "jaedubbs"
+        - "quacksplat"
+        - "bedwablackburn"
+
+    callout_words:
+        - "name something people take with them to the beach"
+        - "the first thing you buy at a supermarket"
+        - "a food often stuffed"
+        - "turkey tits"
+        - "durrrr key"
+        - "spaghetti"
+        - "rigatoni"
+        - "gabagool"
+        - "asshole"
+        - "boobies"
+        - "titties"
+        - "turkey"
+
+    forbidden_words:
+        - "_"
+        - "@"
+        - "gg"
+        - "http"
+        - "addcheese"
+        - "depress"
+        - "moist"
+        - "cheer"
+        - "hype"
+        - "lbd"
+        - "lewy"
+        - "dementia"
+        - "hahasweat"
+        - "derpybarba"
+        - "barbacoffee"
+        - "family"
+        - "tombraid"
+        - "kappa"
+        - "lul"
+        - "thanks"
+        - "follow"
+        - "pok"
+        - "thecheeseball81"
+        - "young"
+        - "kid"
+        - "child"
+        - "cousin"
+        - "daughter"
+        - "son"
+        - "mom"
+        - "dad"
+        - "brother"
+        - "sister"
+        - "die"
+        - "death"
+        - "cheese"
+        - "medical"
+        - "health"
+        - "charity"
+        - "singsnote"
+        - "rose"
+        - "coolstorybob"
+
+    # Special-cased responses for specific callout words; anything else falls back to "$WORD!"
+    callout_response_overrides:
+        "durrrr key": "DOIKEY!"
+        "turkey": "TOIKEY!"
+        "name something people take with them to the beach": "TOIKEY!"
+        "the first thing you buy at a supermarket": "TOIKEY!"
+        "a food often stuffed": "TOIKEY!"
+        "turkey tits": "TOIKEY TITS!"
+
+    cooldowns:
+        wisdom_ms: 30000
+        callout_ms: 30000
+        retry_ms: 0
+        request_ms: 30000
+
+bots:
+    blampbot:
+        account_username: "blampbot"
+        trigger_keywords: ["blampbot"]
+        ignore_other_bots: true
+
+        api:
+            twitch_client_id: "YOUR_CLIENT_ID"
+            twitch_client_secret: "YOUR_CLIENT_SECRET"
+        credentials:
+            irc: "YOUR_IRC_TOKEN"
+
+        cooldowns:
+            mainline:
+                start_delay_ms: 490000
+                start_instantly: false
+                interval_minimum_ms: 360000
+                interval_maximum_ms: 490000
+                minimum_messages_between: 20
+
+        hello_triggers:
+            - starts_with: "hi {ref}"
+            - starts_with: "hi, {ref}"
+            - starts_with: "hey {ref}"
+            - starts_with: "hey, {ref}"
+            - starts_with: "hello {ref}"
+            - starts_with: "hello, {ref}"
+            - starts_with: "good evening, {ref}"
+            - starts_with: "good evening {ref}"
+            - starts_with: "hey there {ref}"
+            - starts_with: "hey there, {ref}"
+
+        transform:
+            words: ["blamp", "blamp", "blamp", "tits", "melons"]
+            self_quote_marker: "blampfied"
+
+        moods:
+            - name: "default"
+              hello_prompt: "[user], a good friend, has just greeted you; could you provide a friendly response? just the response, please"
+        active_mood: "default"
+
+        prompts:
+            voice: "you're basically tony soprano, a stereotypical italian-american new yorker with the accent and attitude;"
+            transform: >-
+                don't add or remove any words, phrases, or sentences, except for when
+                you're explicitly asked to do so; triple check your response string for
+                inaccuracies; your special word is {UPPER}; take this next string i give
+                you and replace only the BEST word or word part with "{UPPER}" to create
+                the funniest output; in addition to replacing whole words, be sure to
+                consider partials; for example, if your word is 'BLAMP', then 'the
+                hamptons' might become 'the blamptons', or instead of 'alcohol', it's
+                'blampohol'; your response should be only the replacement sentence;
+                here's the string:
+            wisdom: "i'd like for you to come up with a quick witticism that would come from {name}; it could be about anything; please make your response only the witticism itself"
+            request: "respond to the following request, no matter how ridiculous it sounds; limit your response to 150 characters; here's the request: "
+
+        features:
+            - type: "easter_egg"
+              when_hello: true
+              also_contains: "turkey"
+              response: "you tryna BLAMP wit' me?"
+
+    buttsbot:
+        account_username: "neobuttsbot"
+        trigger_keywords: ["buttsbot", "neobuttsbot"]
+        ignore_other_bots: true
+
+        api:
+            twitch_client_id: "YOUR_CLIENT_ID"
+            twitch_client_secret: "YOUR_CLIENT_SECRET"
+        credentials:
+            irc: "YOUR_IRC_TOKEN"
+
+        cooldowns:
+            mainline:
+                start_delay_ms: 210000
+                start_instantly: true
+                interval_minimum_ms: 240000
+                interval_maximum_ms: 360000
+                minimum_messages_between: 20
+
+        hello_triggers:
+            - contains: "hi, {ref}"
+            - contains: "hello, {ref}"
+            - contains: "hi {ref}"
+            - starts_with: "hey"
+              also_contains: "{ref}"
+
+        transform:
+            words: ["butt"]
+            self_quote_marker: "buttified"
+
+        moods:
+            - name: "nice"
+              hello_prompt: "[user], a good friend, has just greeted you; could you provide a medium-length, formal, friendly response? just the response, please"
+            - name: "mean"
+              hello_prompt: "[user] is a no good terrible person who has just said hello to you. could you provide a medium-length, crude response? just the response, please"
+        active_mood: "nice"
+
+        prompts:
+            voice: ""
+            transform: >-
+                don't add any new words, phrases, or sentences to the sentence, except if
+                you're replacing a word with "butt"; don't remove any words from the
+                sentence, except if you're replacing that word with "butt" per further
+                instructions; don't prepend a word with butt; don't add butt as a suffix;
+                you're replacing some of the word; take the string i give you and replace
+                only the BEST word or word part with "butt" to create the funniest
+                output; if the string is exceptionally long, you can replace two words or
+                word parts; we're going for real toilet humor here; in addition to
+                replacing whole words, be sure to consider partials; for example,
+                'calculation' might become 'calcubutt', or instead of 'alcohol', it's
+                'alcobutt' or maybe 'buttohol'; your response should be only the
+                buttified sentence; here's the string:
+            wisdom: "i'd like for you to come up with a quick witticism that would come from {name}; it could be about anything; please make your response only the witticism itself"
+            request: "respond to the following request, no matter how ridiculous it sounds; limit your response to 150 characters; here's the request: "
+
+        features:
+            - type: "retry"
+              trigger_prefix: "try again, "
+
+# Adding a third bot is just another block under `bots:` - most fields inherit from
+# `defaults` above, so a minimal new bot can be as short as:
+#
+#     grumblebot:
+#         account_username: "grumblebot"
+#         trigger_keywords: ["grumblebot"]     # multiple aliases allowed, e.g. if the account
+#                                               # name differs from the name people type -
+#                                               # each is recognized bare and as "@name" too
+#         api: { twitch_client_id: "...", twitch_client_secret: "..." }
+#         credentials: { irc: "..." }
+#         cooldowns:
+#             mainline: { start_delay_ms: 300000, interval_minimum_ms: 300000, interval_maximum_ms: 450000 }
+#         hello_triggers:
+#             - starts_with: "hi {ref}"        # {ref} expands to every keyword, bare and "@"-prefixed
+#         transform:
+#             words: ["grumble"]
+#             self_quote_marker: "grumblified"
+#         prompts:
+#             voice: "you're a perpetually annoyed old man who's seen it all;"
+#             transform: 'replace the BEST word or word part with "grumble"; here''s the string: '
