@@ -6,12 +6,12 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * Covers [Messaging]'s [ActivityBus] wiring: stdout output itself is unchanged (not
- * re-verified here), but every complete "line" - possibly built from several
- * addNewLine=false fragments, as [Cooldowns.printCooldownMessages] does - should also
- * reach the bus as one [ActivityEvent.Log] with one [LogSegment] per fragment (level +
- * plain text, no leftover ANSI codes), so the GUI can color each fragment the way the
- * console did instead of flattening a multi-color line into one color.
+ * Covers [Messaging]'s [ActivityBus] wiring - the web GUI is the only consumer, there's no
+ * console output at all. Every complete "line" - possibly built from several
+ * addNewLine=false fragments, as [Cooldowns.printCooldownMessages] does - should reach the
+ * bus as one [ActivityEvent.Log] with one [LogSegment] per fragment (level + plain text),
+ * so the GUI can color each fragment independently instead of flattening a multi-color line
+ * into one color.
  */
 class MessagingLogTest {
     @AfterEach

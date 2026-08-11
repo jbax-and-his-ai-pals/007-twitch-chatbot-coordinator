@@ -115,16 +115,10 @@ body {
   overflow: hidden;
 }
 
-.simulate-card {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-}
-.simulate-card h3 { margin: 0 0 2px; font-size: 13px; }
 .simulate-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
 }
 .simulate-form input {
   background: var(--panel-alt);
@@ -134,8 +128,8 @@ body {
   padding: 6px 8px;
   font-size: 12px;
 }
-.simulate-form input#simulateUser { width: 140px; flex: none; }
-.simulate-form input#simulateMessage { flex: 1; }
+.simulate-form input#simulateUser { width: 100px; flex: 1 1 100px; }
+.simulate-form input#simulateMessage { flex: 3 1 140px; }
 .simulate-form button {
   background: var(--purple);
   border: none;

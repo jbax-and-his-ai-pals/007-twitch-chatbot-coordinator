@@ -98,7 +98,7 @@ class Controller(private val configuration: Configuration) {
         try {
             dispatch(event)
         } catch (e: Exception) {
-            println(e.stackTraceToString())
+            Messaging.error(e.stackTraceToString())
         }
     }
 

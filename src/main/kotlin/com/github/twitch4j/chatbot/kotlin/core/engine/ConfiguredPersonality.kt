@@ -74,7 +74,6 @@ class ConfiguredPersonality(
         messagesSinceLastMainline++
 
         val eligibility = processed.eligibilityFor(bot, commonConfig)
-        eligibility.printStatus(event)
         val message = event.message.lowercase()
 
         // "<reference>, " prefix - shared by the privileged jerb request and the public request trigger
@@ -97,7 +96,16 @@ class ConfiguredPersonality(
 
         return when {
             isJerbRequest -> PersonalityIntent.Secondary { doJerbRequest(event, referencePrefix!!) }
-            !isValid -> PersonalityIntent.None
+            // Eligibility diagnostics (excluded user, too short/long, forbidden phrase) only
+            // print here, where they're actually why nothing happened - every branch below is
+            // reached only when isValid is already true, meaning either those issues don't
+            // exist (baseValid was the decider) or an earlier check (callout/yes/no/why/hello)
+            // bypassed them entirely, so printing them there would misleadingly suggest they
+            // blocked an action that's about to happen anyway.
+            !isValid -> {
+                eligibility.printStatus(event)
+                PersonalityIntent.None
+            }
             eligibility.containsCallout -> PersonalityIntent.Secondary { doCallout(event, eligibility) }
             isNo -> PersonalityIntent.Secondary { beScolded(event) }
             isYes -> PersonalityIntent.Secondary { bePraised(event) }

@@ -285,6 +285,68 @@ class ConfiguredPersonalityTest {
         }
     }
 
+    @Test
+    fun `a too-short message that also matches a hello trigger does not log the too-short rejection`() {
+        // Hello bypasses eligibility.baseValid entirely (isValid = isHello || ... || baseValid),
+        // so "too short" never actually blocks it - logging that diagnostic here would
+        // misleadingly suggest something got rejected when the hello-back is about to fire.
+        val bus = ActivityBus()
+        Messaging.bus = bus
+        try {
+            val p = ConfiguredPersonality(
+                bot = testBotDefinition(
+                    triggerKeywords = listOf("buttsbot"),
+                    helloTriggers = listOf(HelloTrigger(startsWith = "hi {ref}")),
+                    messageLength = MessageLengthConfig(minimum = 20, maximum = 100),
+                ),
+                client = client,
+                channel = "testchannel",
+                genericAI = GenericAI(fakeAI),
+            )
+
+            val intent = dispatch(p, eventFrom("hi buttsbot")) // 11 chars, below the 20-char minimum
+
+            assertTrue(intent is PersonalityIntent.Secondary)
+            val logs = bus.recent().filterIsInstance<ActivityEvent.Log>()
+            assertTrue(
+                logs.none { log -> log.segments.any { it.text.contains("TOO SHORT") } },
+                "expected no too-short diagnostic since hello bypasses it, got: $logs",
+            )
+        } finally {
+            Messaging.bus = null
+        }
+    }
+
+    @Test
+    fun `a too-short message that also contains a callout word does not log the too-short rejection`() {
+        val bus = ActivityBus()
+        Messaging.bus = bus
+        try {
+            val p = ConfiguredPersonality(
+                bot = testBotDefinition(
+                    triggerKeywords = listOf("buttsbot"),
+                    calloutWords = listOf("turkey"),
+                    calloutResponseOverrides = mapOf("turkey" to "TOIKEY!"),
+                    messageLength = MessageLengthConfig(minimum = 20, maximum = 100),
+                ),
+                client = client,
+                channel = "testchannel",
+                genericAI = GenericAI(fakeAI),
+            )
+
+            val intent = dispatch(p, eventFrom("turkey")) // 6 chars, below the 20-char minimum
+
+            assertTrue(intent is PersonalityIntent.Secondary)
+            val logs = bus.recent().filterIsInstance<ActivityEvent.Log>()
+            assertTrue(
+                logs.none { log -> log.segments.any { it.text.contains("TOO SHORT") } },
+                "expected no too-short diagnostic since a callout bypasses it, got: $logs",
+            )
+        } finally {
+            Messaging.bus = null
+        }
+    }
+
     // ---- CommonConfig: shared words/users every bot recognizes alike -------------------
 
     @Test

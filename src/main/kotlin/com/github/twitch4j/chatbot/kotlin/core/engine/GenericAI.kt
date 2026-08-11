@@ -3,6 +3,7 @@ package com.github.twitch4j.chatbot.kotlin.core.engine
 import com.github.twitch4j.chatbot.kotlin.core.AIClient
 import com.github.twitch4j.chatbot.kotlin.core.AIModel
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
+import com.github.twitch4j.chatbot.kotlin.core.Messaging
 
 /**
  * Generic Gemini prompt executor, parameterized entirely by a [BotDefinition]'s
@@ -48,13 +49,13 @@ class GenericAI(private val aiClient: AIClient = AIModel) {
             try {
                 val result = aiClient.generateContent(prompt)
                 if (result.isEmpty()) {
-                    println("\tEMPTY RESULT.")
+                    Messaging.info("EMPTY RESULT.")
                 } else {
-                    println("\t$label: $result")
+                    Messaging.green("\t$label: $result")
                     return result
                 }
             } catch (e: Exception) {
-                println("\tERROR: ${e.message}")
+                Messaging.error("${e.message}")
                 Thread.sleep(1000)
             }
         }
@@ -64,7 +65,7 @@ class GenericAI(private val aiClient: AIClient = AIModel) {
         try {
             aiClient.generateContent(prompt)
         } catch (e: Exception) {
-            println("\tERROR: ${e.message}.")
+            Messaging.error("${e.message}.")
             Thread.sleep(1000)
             ""
         }

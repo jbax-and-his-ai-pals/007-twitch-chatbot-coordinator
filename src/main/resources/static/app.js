@@ -216,7 +216,7 @@ function buildFeedEntryEl(evt) {
     row.innerHTML = `<span class="feed-time">${timeStr(evt.timestampMs)}</span>` +
       `<span class="feed-tag tag-ai">${evt.mocked ? "MOCK AI" : "REAL AI"}</span>` +
       `<span class="feed-bot">${escapeHtml(evt.botKey)}</span>` +
-      `<span class="feed-ai-detail">prompt: ${escapeHtml(evt.prompt.slice(0, 200))}</span>` +
+      `<span class="feed-ai-detail">prompt: ${escapeHtml(evt.prompt)}</span>` +
       `<span class="feed-ai-detail">reply: ${escapeHtml(evt.response)}</span>`;
   } else if (evt.type === "log") {
     const segments = evt.segments || [];
@@ -458,7 +458,9 @@ function renderBotCard(bot) {
     document.getElementById("simulateUser").value = last.sourceUser;
     const messageInput = document.getElementById("simulateMessage");
     messageInput.focus();
-    document.querySelector(".simulate-card").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const simulateCard = document.getElementById("simulateCard");
+    simulateCard.classList.remove("collapsed");
+    simulateCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
 
   return card;
