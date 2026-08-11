@@ -1,5 +1,8 @@
 debug: false
 
+# Port the embedded GUI control panel listens on - open http://localhost:PORT once running.
+gui_port: 8080
+
 # Channels - every bot account joins every channel listed here
 channels:
     - "thecheeseball81"

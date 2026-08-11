@@ -5,13 +5,19 @@ import com.github.philippheuer.events4j.simple.SimpleEventHandler
 import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.TwitchClientBuilder
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
+import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
+import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.Configuration
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
+import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
+import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
+import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
+import com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI
 
 /**
  * Runs an arbitrary number of bot identities, defined entirely by `config.yaml`, against
@@ -19,6 +25,12 @@ import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
  * eligibility/secondary triggers are evaluated independently (unchanged from how each
  * bot behaved standalone), and the mainline transform is arbitrated by [Scheduler] so
  * bots don't act on the same message except rarely.
+ *
+ * Also wires up everything the GUI control panel needs: a shared [ActivityBus] every bot
+ * publishes chat/AI activity to, a shared [MockModeState] so the GUI's mock-mode switch
+ * affects every bot's LLM calls at once, and [admin] - a network-free facade exposing all
+ * of it, since this class itself can't be unit-tested (`createClient` connects to real
+ * Twitch via `TwitchClientBuilder.build()`).
  */
 class Controller(private val configuration: Configuration) {
     private val definitions: List<BotDefinition> = run {
@@ -39,9 +51,30 @@ class Controller(private val configuration: Configuration) {
 
     private val clients: Map<String, ITwitchClient> = definitions.associate { it.key to createClient(it) }
 
+    private val activityBus = ActivityBus()
+    private val mockModeState = MockModeState()
+    private val mockAiClient = MockAIClient()
+
     private val personalities: List<Personality> = definitions.map { def ->
-        ConfiguredPersonality(bot = def, client = clients.getValue(def.key), channel = primaryChannel)
+        ConfiguredPersonality(
+            bot = def,
+            client = clients.getValue(def.key),
+            channel = primaryChannel,
+            genericAI = GenericAI(
+                SwitchableAIClient(botKey = def.key, state = mockModeState, activityBus = activityBus, mock = mockAiClient)
+            ),
+            activityBus = activityBus,
+        )
     }
+
+    /** Network-free facade for the GUI control panel - see [AdminController]. */
+    val admin: AdminController = AdminController(
+        personalities = personalities,
+        clients = clients,
+        activityBus = activityBus,
+        mockModeState = mockModeState,
+        mockAiClient = mockAiClient,
+    )
 
     fun start() {
         // Every client needs to join the channel(s) under its own account so it can send
@@ -68,6 +101,7 @@ class Controller(private val configuration: Configuration) {
 
     private fun dispatch(event: ChannelMessageEvent) {
         Messaging.message("${event.channel.name} - ${event.user.name} - \"${event.message}\"")
+        activityBus.publish(ActivityEvent.Incoming(channel = event.channel.name, user = event.user.name, message = event.message))
 
         val processed = ProcessedEvent.fromEvent(event)
         processed.printSharedStatus()

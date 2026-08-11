@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>blamputts control panel</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>blamputts control panel</h1>
+    <div class="mock-toggle">
+      <span id="connStatus" class="conn-dot" title="WebSocket connection"></span>
+      <label class="switch">
+        <input type="checkbox" id="mockSwitch" />
+        <span class="slider"></span>
+      </label>
+      <span id="mockLabel">MOCK MODE</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="feed-panel">
+      <div class="panel-header">
+        <h2>Activity</h2>
+        <div class="feed-controls">
+          <label><input type="checkbox" id="showAiCalls" checked /> show AI calls</label>
+          <button id="clearFeed">Clear</button>
+        </div>
+      </div>
+      <div id="feed" class="feed"></div>
+    </section>
+
+    <aside class="bots-panel" id="botsPanel">
+      <h2>Bots</h2>
+      <div id="botCards"></div>
+
+      <div class="overrides-card">
+        <h3>Mock response overrides</h3>
+        <p class="hint">Any mock prompt containing the keyword returns the response instead of the default.</p>
+        <div class="override-form">
+          <input id="overrideKeyword" placeholder="keyword" />
+          <input id="overrideResponse" placeholder="response" />
+          <button id="addOverride">Add</button>
+        </div>
+        <ul id="overridesList" class="overrides-list"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

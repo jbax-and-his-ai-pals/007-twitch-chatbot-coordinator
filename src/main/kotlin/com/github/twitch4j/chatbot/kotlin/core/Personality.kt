@@ -20,10 +20,17 @@ interface Personality {
     val name: String
     val client: ITwitchClient
     val channel: String
+    val definition: BotDefinition
 
     /** Decide what (if anything) this personality wants to do with the message. */
     fun determineIntent(event: ChannelMessageEvent, processed: ProcessedEvent): PersonalityIntent
 
     /** Perform the mainline blamp/butt transform; only called when the Scheduler has approved it. */
     fun actMainline(event: ChannelMessageEvent)
+
+    /** Read-only status of this bot's cooldown timers, for a GUI to display. */
+    fun cooldownSnapshot(): CooldownSnapshot
+
+    /** GUI-driven override of one of this bot's cooldown timers. */
+    fun adminCooldown(type: CooldownType, action: CooldownAdminAction)
 }

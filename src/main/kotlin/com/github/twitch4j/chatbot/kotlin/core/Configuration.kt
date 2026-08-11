@@ -14,7 +14,9 @@ data class Configuration(
     val debug: Boolean = false,
     val channels: List<String> = listOf(),
     val defaults: DefaultsConfig = DefaultsConfig(),
-    val bots: Map<String, RawBotConfig> = mapOf()
+    val bots: Map<String, RawBotConfig> = mapOf(),
+    /** Port the embedded GUI control panel listens on (http://localhost:PORT). */
+    val guiPort: Int = 8080,
 ) {
     companion object {
         /** Load the configuration from the config.yaml file */

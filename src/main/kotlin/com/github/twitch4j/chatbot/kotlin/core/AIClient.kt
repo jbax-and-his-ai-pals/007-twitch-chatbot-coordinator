@@ -5,6 +5,6 @@ package com.github.twitch4j.chatbot.kotlin.core
  * real API (no network calls, no cost) while still exercising all of [GenericAI][com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI]'s
  * prompt-building logic.
  */
-interface AIClient {
+fun interface AIClient {
     fun generateContent(prompt: String): String
 }

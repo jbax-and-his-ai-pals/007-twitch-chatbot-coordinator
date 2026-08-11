@@ -2,8 +2,13 @@ package com.github.twitch4j.chatbot.kotlin.core.engine
 
 import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
+import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
+import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.BotEligibility
+import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
+import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
+import com.github.twitch4j.chatbot.kotlin.core.CooldownType
 import com.github.twitch4j.chatbot.kotlin.core.Cooldowns
 import com.github.twitch4j.chatbot.kotlin.core.FeatureConfig
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
@@ -22,15 +27,18 @@ import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
  * keyword is recognized both bare and with an "@" mention prefix via [TriggerMatcher].
  *
  * [genericAI] defaults to the real Gemini-backed client but can be swapped for a fake in
- * tests - see `FakeAIClient`.
+ * tests - see `FakeAIClient`. [activityBus] defaults to a fresh, unobserved bus so
+ * existing tests are unaffected; the GUI wires in a shared one via [com.github.twitch4j.chatbot.kotlin.controller.Controller].
  */
 class ConfiguredPersonality(
     private val bot: BotDefinition,
     override val client: ITwitchClient,
     override val channel: String,
     private val genericAI: GenericAI = GenericAI(),
+    private val activityBus: ActivityBus = ActivityBus(),
 ) : Personality {
     override val name = bot.key
+    override val definition: BotDefinition get() = bot
 
     private val referenceForms = TriggerMatcher.referenceForms(bot.triggerKeywords)
 
@@ -117,39 +125,48 @@ class ConfiguredPersonality(
             messagesSinceLastMainline = 0
             lastMessage = transformed.transformed
             lastUser = event.user.name
-            client.chat.sendMessage(channel, transformed.transformed)
+            send(channel, transformed.transformed)
         } else {
             Messaging.info("No action taken.")
         }
+    }
+
+    override fun cooldownSnapshot(): CooldownSnapshot = cooldowns.snapshot()
+
+    override fun adminCooldown(type: CooldownType, action: CooldownAdminAction) = cooldowns.admin(type, action)
+
+    private fun send(targetChannel: String, message: String, manual: Boolean = false) {
+        client.chat.sendMessage(targetChannel, message)
+        activityBus.publish(ActivityEvent.Outgoing(botKey = bot.key, channel = targetChannel, message = message, manual = manual))
     }
 
     private fun pickTransformWord() = (bot.transform.words.randomOrNull() ?: bot.primaryKeyword).uppercase()
 
     private fun bePraised(event: ChannelMessageEvent) {
         Messaging.green("\tTHEY LOVE ME!")
-        client.chat.sendMessage(channel, ":D")
+        send(channel, ":D")
     }
 
     private fun beScolded(event: ChannelMessageEvent) {
         Messaging.info("THEY NO LIKE ME :(")
-        client.chat.sendMessage(channel, ":(")
+        send(channel, ":(")
     }
 
     private fun beWhyd(event: ChannelMessageEvent) {
         Messaging.info("THEY NOT SURE ABOUT ME !?!!!?")
-        client.chat.sendMessage(channel, "O_o")
+        send(channel, "O_o")
     }
 
     private fun doEasterEgg(egg: FeatureConfig.EasterEgg) {
         Messaging.purple("\t${egg.response}")
-        client.chat.sendMessage(channel, egg.response)
+        send(channel, egg.response)
     }
 
     /** [matchedPrefix] is the lowercase reference prefix that matched; sliced from the original-cased message. */
     private fun doJerbRequest(event: ChannelMessageEvent, matchedPrefix: String) {
         val request = event.message.substring(matchedPrefix.length)
         val response = genericAI.request(bot, request)
-        client.chat.sendMessage(channel, response)
+        send(channel, response)
     }
 
     private fun doHelloBack(event: ChannelMessageEvent) {
@@ -162,27 +179,27 @@ class ConfiguredPersonality(
         }
 
         Messaging.green("\tHELLO BACK - $response")
-        client.chat.sendMessage(channel, response)
+        send(channel, response)
     }
 
     private fun doWisdom() {
         val wisdom = genericAI.wisdom(bot)
         Messaging.cyan("\t$wisdom")
-        client.chat.sendMessage(channel, wisdom)
+        send(channel, wisdom)
         cooldowns.markWisdomUsed()
     }
 
     private fun doRequest(event: ChannelMessageEvent, matchedPrefix: String) {
         val response = genericAI.request(bot, event.message.substring(matchedPrefix.length))
         Messaging.requestResponse(response)
-        client.chat.sendMessage(channel, response)
+        send(channel, response)
         cooldowns.markRequestUsed()
     }
 
     private fun doRetry(event: ChannelMessageEvent) {
         val retried = genericAI.transform(bot, lastMessage, pickTransformWord())
-        client.chat.sendMessage("jerbtrundles", retried)
-        client.chat.sendMessage(channel, retried)
+        send("jerbtrundles", retried)
+        send(channel, retried)
         cooldowns.markRetryUsed()
     }
 
@@ -190,7 +207,7 @@ class ConfiguredPersonality(
         if (!cooldowns.isCalloutInCooldown()) {
             eligibility.calloutWordsList.firstOrNull()?.let {
                 val message = bot.calloutResponseOverrides[it] ?: (it.uppercase() + "!")
-                client.chat.sendMessage(channel, message)
+                send(channel, message)
                 Messaging.callout(message)
                 cooldowns.markCalloutUsed()
             }
