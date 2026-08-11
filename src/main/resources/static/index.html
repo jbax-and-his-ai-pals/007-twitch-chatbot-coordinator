@@ -24,8 +24,15 @@
       <div class="panel-header">
         <h2>Activity</h2>
         <div class="feed-controls">
+          <select id="historyDateSelect" class="feed-history-select" title="Browse a past day's activity log">
+            <option value="">live</option>
+          </select>
           <button id="clearFeed">Clear</button>
         </div>
+      </div>
+      <div id="historyBanner" class="history-banner" style="display:none">
+        Viewing history for <strong id="historyBannerDate"></strong> - read-only
+        <button type="button" id="historyBackBtn">Back to live</button>
       </div>
       <div class="feed-filters">
         <div class="feed-filter-types">

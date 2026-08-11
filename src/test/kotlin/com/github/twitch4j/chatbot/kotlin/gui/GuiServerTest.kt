@@ -4,6 +4,8 @@ import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.chat.ITwitchChat
 import com.github.twitch4j.chatbot.kotlin.controller.AdminController
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
+import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
+import com.github.twitch4j.chatbot.kotlin.core.ActivityLog
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
@@ -35,6 +37,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import java.time.LocalDate
 
 /**
  * Exercises the real HTTP/WebSocket routes via Ktor's `testApplication`, against an
@@ -577,5 +582,58 @@ class GuiServerTest {
         val config = json.decodeFromString<CommonConfigDetailDto>(client.get("/api/common-config").bodyAsText())
         assertTrue(config.calloutWords.contains("turkey"))
         assertEquals("TOIKEY!", config.calloutResponseOverrides["turkey"])
+    }
+
+    // ---- Activity history ----------------------------------------------------------------
+
+    private fun adminWithHistory(activityLog: ActivityLog): AdminController {
+        val client: ITwitchClient = mockk(relaxed = true)
+        every { client.chat } returns mockk(relaxed = true)
+        val personality = ConfiguredPersonality(
+            bot = testBotDefinition(key = "blampbot", accountUsername = "blampbot", triggerKeywords = listOf("blampbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(FakeAIClient()),
+            activityBus = ActivityBus(),
+        )
+        return AdminController(
+            personalities = listOf(personality),
+            clients = mapOf("blampbot" to client),
+            activityBus = ActivityBus(),
+            mockModeState = MockModeState(),
+            mockAiClient = MockAIClient(),
+            commonConfig = CommonConfig(),
+            activityLog = activityLog,
+        )
+    }
+
+    @Test
+    fun `GET api activity history dates lists days with a persisted log`(@TempDir dir: File) = testApplication {
+        val log = ActivityLog(dir)
+        log.append(ActivityEvent.Incoming(channel = "c", user = "a", message = "hi"))
+        val admin = adminWithHistory(log)
+        application { guiModule(admin) }
+
+        val response = client.get("/api/activity/history/dates")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val dates = json.decodeFromString<List<String>>(response.bodyAsText())
+        assertEquals(listOf(LocalDate.now().toString()), dates)
+    }
+
+    @Test
+    fun `GET api activity history for a date returns that day's events, 400 for a malformed date`(@TempDir dir: File) = testApplication {
+        val log = ActivityLog(dir)
+        log.append(ActivityEvent.Incoming(channel = "c", user = "a", message = "logged from history"))
+        val admin = adminWithHistory(log)
+        application { guiModule(admin) }
+
+        val response = client.get("/api/activity/history/${LocalDate.now()}")
+        assertEquals(HttpStatusCode.OK, response.status)
+        val events = json.decodeFromString<List<ActivityEventDto>>(response.bodyAsText())
+        assertEquals(listOf("logged from history"), events.map { it.message })
+
+        val badResponse = client.get("/api/activity/history/not-a-date")
+        assertEquals(HttpStatusCode.BadRequest, badResponse.status)
     }
 }

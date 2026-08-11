@@ -10,6 +10,7 @@ import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownStatus
 import com.github.twitch4j.chatbot.kotlin.core.LogSegment
+import com.github.twitch4j.chatbot.kotlin.core.PersistedActivityEvent
 import kotlinx.serialization.Serializable
 
 /**
@@ -125,6 +126,24 @@ fun ActivityEvent.toDto(): ActivityEventDto = when (this) {
         segments = segments.map { it.toDto() },
     )
 }
+
+/** For the activity-history routes - [PersistedActivityEvent] is `core`'s on-disk mirror of [ActivityEvent], already shaped almost identically to [ActivityEventDto]. */
+fun PersistedActivityEvent.toDto() = ActivityEventDto(
+    type = type,
+    timestampMs = timestampMs,
+    channel = channel,
+    user = user,
+    message = message,
+    botKey = botKey,
+    manual = manual,
+    simulated = simulated,
+    sourceUser = sourceUser,
+    sourceMessage = sourceMessage,
+    prompt = prompt,
+    response = response,
+    mocked = mocked,
+    segments = segments?.map { LogSegmentDto(it.level, it.text) },
+)
 
 @Serializable
 data class SendRequestDto(val botKey: String, val message: String)

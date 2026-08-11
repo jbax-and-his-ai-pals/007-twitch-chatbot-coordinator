@@ -12,6 +12,10 @@ const filterWho = document.getElementById("filterWho");
 const filterText = document.getElementById("filterText");
 const filterLogLevel = document.getElementById("filterLogLevel");
 const overridesListEl = document.getElementById("overridesList");
+const historyDateSelect = document.getElementById("historyDateSelect");
+const historyBanner = document.getElementById("historyBanner");
+const historyBannerDate = document.getElementById("historyBannerDate");
+const historyBackBtn = document.getElementById("historyBackBtn");
 
 const COOLDOWN_TYPES = ["mainline", "wisdom", "callout", "retry", "request"];
 const RECENT_MESSAGES_LIMIT = 8;
@@ -37,6 +41,8 @@ const LOG_TEXT_CLASS = {
 let bots = [];
 const recentByBot = new Map();
 const allEvents = [];
+let viewingHistory = false;
+let historyEvents = [];
 
 async function api(path, options) {
   const res = await fetch(`/api${path}`, {
@@ -240,16 +246,18 @@ function recordEvent(evt) {
   while (allEvents.length > ACTIVITY_HISTORY_LIMIT) allEvents.shift();
 }
 
-/** Fully re-renders the feed from allEvents against the current filter bar state. */
+/** Fully re-renders the feed from the active source (live allEvents, or a loaded historical day) against the current filter bar state. */
 function renderFeed() {
   feedEl.innerHTML = "";
-  allEvents.filter(matchesFilters).forEach((evt) => feedEl.appendChild(buildFeedEntryEl(evt)));
+  const source = viewingHistory ? historyEvents : allEvents;
+  source.filter(matchesFilters).forEach((evt) => feedEl.appendChild(buildFeedEntryEl(evt)));
   feedEl.scrollTop = feedEl.scrollHeight;
 }
 
-/** A freshly-arrived (WebSocket) event: record it, and append it live if it currently matches. */
+/** A freshly-arrived (WebSocket) event: always record it, but only render it live when not currently browsing history. */
 function appendLiveEvent(evt) {
   recordEvent(evt);
+  if (viewingHistory) return;
   if (!matchesFilters(evt)) return;
 
   const atBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 40;
@@ -262,9 +270,45 @@ function appendLiveEvent(evt) {
 filterLogLevel.addEventListener("change", renderFeed);
 
 document.getElementById("clearFeed").addEventListener("click", () => {
+  if (viewingHistory) return;
   allEvents.length = 0;
   feedEl.innerHTML = "";
 });
+
+// ==================================================================================
+// Activity history: browse a past day's log (read-only), loaded on demand.
+// ==================================================================================
+
+async function populateHistoryDates() {
+  const dates = await api("/activity/history/dates");
+  const previous = historyDateSelect.value;
+  historyDateSelect.innerHTML = `<option value="">live</option>` +
+    dates.map((d) => `<option value="${d}">${d}</option>`).join("");
+  if (dates.includes(previous)) historyDateSelect.value = previous;
+}
+
+async function loadHistoryDate(date) {
+  historyEvents = await api(`/activity/history/${encodeURIComponent(date)}`);
+  viewingHistory = true;
+  historyBannerDate.textContent = date;
+  historyBanner.style.display = "flex";
+  renderFeed();
+}
+
+function backToLiveFeed() {
+  viewingHistory = false;
+  historyEvents = [];
+  historyDateSelect.value = "";
+  historyBanner.style.display = "none";
+  renderFeed();
+}
+
+historyDateSelect.addEventListener("change", () => {
+  const date = historyDateSelect.value;
+  if (!date) backToLiveFeed();
+  else loadHistoryDate(date);
+});
+historyBackBtn.addEventListener("click", backToLiveFeed);
 
 document.getElementById("simulateForm").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1107,7 +1151,7 @@ document.getElementById("addOverride").addEventListener("click", async () => {
 });
 
 async function init() {
-  await Promise.all([loadBots(), loadInitialFeed(), loadMockMode(), loadOverrides(), refreshCommonConfigPanel()]);
+  await Promise.all([loadBots(), loadInitialFeed(), loadMockMode(), loadOverrides(), refreshCommonConfigPanel(), populateHistoryDates()]);
   // loadBots and loadInitialFeed race independently, so re-sync recent-message cards once
   // both have definitely finished, in case events arrived before their bot's card existed.
   bots.forEach((bot) => renderRecentMessages(bot.key));

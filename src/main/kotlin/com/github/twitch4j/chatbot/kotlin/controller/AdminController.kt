@@ -4,6 +4,7 @@ import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
+import com.github.twitch4j.chatbot.kotlin.core.ActivityLog
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
@@ -17,6 +18,7 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.Personality
+import com.github.twitch4j.chatbot.kotlin.core.PersistedActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.PersistedBotState
 import com.github.twitch4j.chatbot.kotlin.core.PersistedCommonState
 import com.github.twitch4j.chatbot.kotlin.core.PersistedHelloTrigger
@@ -30,6 +32,7 @@ import com.github.twitch4j.common.events.domain.EventUser
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.SharedFlow
+import java.time.LocalDate
 
 data class BotStatus(
     val key: String,
@@ -125,6 +128,7 @@ class AdminController(
     private val mockAiClient: MockAIClient,
     private val commonConfig: CommonConfig,
     private val statePersistence: StatePersistence? = null,
+    private val activityLog: ActivityLog? = null,
 ) {
     private val personalityByKey = personalities.associateBy { it.name }
     private val disabledBots = mutableSetOf<String>()
@@ -203,6 +207,12 @@ class AdminController(
 
     /** For the WebSocket route to collect from - live activity as it happens. */
     fun activityFlow(): SharedFlow<ActivityEvent> = activityBus.events
+
+    /** Dates with a persisted activity log, most recent first - empty if [activityLog] wasn't enabled. */
+    fun activityHistoryDates(): List<LocalDate> = activityLog?.availableDates() ?: emptyList()
+
+    /** Every event logged on [date], oldest first - empty if [activityLog] wasn't enabled or nothing was logged that day. */
+    fun activityHistoryFor(date: LocalDate): List<PersistedActivityEvent> = activityLog?.readDate(date) ?: emptyList()
 
     fun mockOverrides(): Map<String, String> = mockAiClient.overridesSnapshot()
 

@@ -239,6 +239,37 @@ body {
 }
 .feed-controls button:hover { color: var(--text); border-color: var(--accent); }
 
+.feed-history-select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.feed-history-select:focus { outline: none; border-color: var(--accent); }
+
+.history-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  background: rgba(251, 191, 36, 0.1);
+  border-bottom: 1px solid var(--border);
+  color: var(--yellow);
+  font-size: 12px;
+}
+.history-banner button {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.history-banner button:hover { border-color: var(--accent); }
+
 .feed-filters {
   display: flex;
   flex-direction: column;

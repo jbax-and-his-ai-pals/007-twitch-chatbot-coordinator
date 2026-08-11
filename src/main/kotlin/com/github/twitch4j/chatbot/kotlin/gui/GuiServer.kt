@@ -28,6 +28,8 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.send
 import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.json.Json
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 
 /**
  * The GUI control panel's embedded web server - REST for one-shot commands/reads, one
@@ -149,6 +151,20 @@ fun Application.guiModule(admin: AdminController) {
             get("/activity") {
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 200
                 call.respond(admin.recentActivity(limit).map { it.toDto() })
+            }
+
+            get("/activity/history/dates") {
+                call.respond(admin.activityHistoryDates().map { it.toString() })
+            }
+
+            get("/activity/history/{date}") {
+                val date = try {
+                    LocalDate.parse(call.parameters["date"])
+                } catch (e: DateTimeParseException) {
+                    call.respond(HttpStatusCode.BadRequest)
+                    return@get
+                }
+                call.respond(admin.activityHistoryFor(date).map { it.toDto() })
             }
 
             route("/bots/{botKey}") {

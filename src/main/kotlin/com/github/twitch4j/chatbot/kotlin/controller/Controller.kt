@@ -7,6 +7,7 @@ import com.github.twitch4j.TwitchClientBuilder
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
+import com.github.twitch4j.chatbot.kotlin.core.ActivityLog
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.Configuration
@@ -19,6 +20,9 @@ import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
 import com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import java.io.File
 
 /**
@@ -72,6 +76,12 @@ class Controller(private val configuration: Configuration) {
     }
 
     private val statePersistence = StatePersistence(File("data/state.json"))
+    private val activityLog = ActivityLog(File("data/logs"))
+
+    // Only used to launch ActivityLog's background collector - never cancelled, since this
+    // process has no formal shutdown path today (matches how the rest of the app runs until
+    // killed); acceptable for a local, personal tool.
+    private val backgroundScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Network-free facade for the GUI control panel - see [AdminController]. */
     val admin: AdminController = AdminController(
@@ -82,6 +92,7 @@ class Controller(private val configuration: Configuration) {
         mockAiClient = mockAiClient,
         commonConfig = commonConfig,
         statePersistence = statePersistence,
+        activityLog = activityLog,
     )
 
     init {
@@ -89,6 +100,7 @@ class Controller(private val configuration: Configuration) {
         // be dispatched - see AdminController.applyPersistedState. No-op on first run, or if
         // nothing's been saved yet (statePersistence.load() returns null).
         statePersistence.load()?.let { admin.applyPersistedState(it) }
+        activityLog.start(backgroundScope, activityBus.events)
     }
 
     fun start() {
