@@ -496,9 +496,8 @@ function configSectionHtml(botKey, config, cooldowns) {
 
   const moderation = `
     ${chipListBlockHtml("bot", botKey, "Excluded users", "excluded-users", "user", config.excludedUsers)}
-    ${chipListBlockHtml("bot", botKey, "Callout words", "callout-words", "word", config.calloutWords)}
+    ${calloutWordsBlockHtml("bot", botKey, config.calloutWords, config.calloutResponseOverrides)}
     ${chipListBlockHtml("bot", botKey, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
-    ${overrideListBlockHtml("bot", botKey, config.calloutResponseOverrides)}
   `;
 
   const personality = `
@@ -606,19 +605,22 @@ function chipListBlockHtml(scope, botKey, title, listKey, fieldName, items) {
   `);
 }
 
-function overrideListBlockHtml(scope, botKey, overrides) {
-  const rows = Object.entries(overrides).map(([word, response]) => `
-    <div class="override-row-cfg" data-action="edit-override" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-word="${escapeHtml(word)}" data-response="${escapeHtml(response)}">
-      <span>"${escapeHtml(word)}" &rarr; ${escapeHtml(response)}</span>
-    </div>
-  `).join("") || `<span class="config-empty">none</span>`;
+/** Each chip shows just the word ("turkey"), or "word -> response" when that word has a response override. */
+function calloutWordsBlockHtml(scope, botKey, words, overrides) {
+  const chips = words.map((word) => {
+    const response = overrides[word] || "";
+    const label = response ? `${escapeHtml(word)} &rarr; ${escapeHtml(response)}` : escapeHtml(word);
+    return `
+      <span class="chip" style="--chip-hue:${hashHue(word)}" data-action="edit-callout-word" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}" data-word="${escapeHtml(word)}" data-response="${escapeHtml(response)}">${label}</span>
+    `;
+  }).join("") || `<span class="config-empty">none</span>`;
 
-  return collapsibleBlockHtml("Callout response overrides", `
-    <div class="override-list-cfg">${rows}</div>
+  return collapsibleBlockHtml("Callout words", `
+    <div class="chip-list">${chips}</div>
     <div class="config-add-form">
-      <input type="text" class="override-word-input" placeholder="word" />
-      <input type="text" class="override-response-input" placeholder="response" />
-      <button data-action="add-override" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}">Add</button>
+      <input type="text" class="callout-word-input" placeholder="word" />
+      <input type="text" class="callout-response-input" placeholder="response override (optional)" />
+      <button data-action="add-callout-word" data-scope="${scope}" data-bot="${escapeHtml(botKey || "")}">Add</button>
     </div>
   `);
 }
@@ -654,9 +656,8 @@ function commonConfigSectionHtml(config) {
 
   const moderation = `
     ${chipListBlockHtml("common", null, "Excluded users", "excluded-users", "user", config.excludedUsers)}
-    ${chipListBlockHtml("common", null, "Callout words", "callout-words", "word", config.calloutWords)}
+    ${calloutWordsBlockHtml("common", null, config.calloutWords, config.calloutResponseOverrides)}
     ${chipListBlockHtml("common", null, "Forbidden words", "forbidden-words", "word", config.forbiddenWords)}
-    ${overrideListBlockHtml("common", null, config.calloutResponseOverrides)}
   `;
 
   return `
@@ -782,38 +783,48 @@ botsPanelEl.addEventListener("click", async (e) => {
       await refreshScoped(scope, botKey);
       break;
     }
-    case "edit-override": {
+    case "edit-callout-word": {
       const { scope, word, response } = target.dataset;
       const prefix = scopedPrefix(scope, botKey);
       openEditModal({
-        title: "Edit callout response",
+        title: "Edit callout word",
         fields: [
           { id: "word", label: "Word", value: word },
-          { id: "response", label: "Response", value: response },
+          { id: "response", label: "Response override (optional)", value: response },
         ],
         onSave: async (values) => {
           const newWord = values.word.trim().toLowerCase();
           const newResponse = values.response.trim();
-          if (!newWord || !newResponse) return;
-          await api(`${prefix}/callout-overrides`, { method: "POST", body: JSON.stringify({ word: newWord, response: newResponse }) });
+          if (!newWord) return;
           if (newWord !== word.toLowerCase()) {
+            await api(`${prefix}/callout-words`, { method: "POST", body: JSON.stringify({ word: newWord }) });
+            await api(`${prefix}/callout-words/${encodeURIComponent(word)}`, { method: "DELETE" });
             await api(`${prefix}/callout-overrides/${encodeURIComponent(word)}`, { method: "DELETE" });
+          }
+          if (newResponse) {
+            await api(`${prefix}/callout-overrides`, { method: "POST", body: JSON.stringify({ word: newWord, response: newResponse }) });
+          } else {
+            await api(`${prefix}/callout-overrides/${encodeURIComponent(newWord)}`, { method: "DELETE" });
           }
           await refreshScoped(scope, botKey);
         },
         onDelete: async () => {
+          await api(`${prefix}/callout-words/${encodeURIComponent(word)}`, { method: "DELETE" });
           await api(`${prefix}/callout-overrides/${encodeURIComponent(word)}`, { method: "DELETE" });
           await refreshScoped(scope, botKey);
         },
       });
       break;
     }
-    case "add-override": {
+    case "add-callout-word": {
       const { scope } = target.dataset;
-      const word = block.querySelector(".override-word-input").value.trim();
-      const response = block.querySelector(".override-response-input").value.trim();
-      if (!word || !response) return;
-      await api(`${scopedPrefix(scope, botKey)}/callout-overrides`, { method: "POST", body: JSON.stringify({ word, response }) });
+      const word = block.querySelector(".callout-word-input").value.trim();
+      const response = block.querySelector(".callout-response-input").value.trim();
+      if (!word) return;
+      await api(`${scopedPrefix(scope, botKey)}/callout-words`, { method: "POST", body: JSON.stringify({ word }) });
+      if (response) {
+        await api(`${scopedPrefix(scope, botKey)}/callout-overrides`, { method: "POST", body: JSON.stringify({ word, response }) });
+      }
       await refreshScoped(scope, botKey);
       break;
     }
