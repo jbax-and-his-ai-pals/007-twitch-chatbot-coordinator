@@ -331,6 +331,22 @@ class AdminControllerTest {
     }
 
     @Test
+    fun `simulateMessage's whole diagnostic cascade lands as one multi-line Log event, not one per line`() {
+        val before = admin.recentActivity().filterIsInstance<ActivityEvent.Log>().size
+
+        // Both configured bots (blampbot, buttsbot) print their own cooldown status line
+        // during determineIntent regardless of what happens next, so a plain chat message
+        // that neither bot acts on still produces at least two printed lines.
+        admin.simulateMessage(user = "someviewer", message = "just chatting here, nothing special")
+
+        val newLogs = admin.recentActivity().filterIsInstance<ActivityEvent.Log>().drop(before)
+        assertEquals(1, newLogs.size, "expected every line from one simulateMessage call to consolidate into a single Log event, got: $newLogs")
+
+        val lineCount = newLogs.single().segments.count { it.newLine }
+        assertTrue(lineCount >= 2, "expected at least 2 completed lines (one cooldown status per bot), got $lineCount")
+    }
+
+    @Test
     fun `simulateMessage returns false when there are no configured bots`() {
         val empty = AdminController(
             personalities = emptyList(),

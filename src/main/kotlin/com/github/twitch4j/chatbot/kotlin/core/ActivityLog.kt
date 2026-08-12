@@ -13,7 +13,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /** Mirrors [LogSegment] - kept separate (rather than making that class itself Jackson-serializable) so persistence stays an isolated concern. */
-data class PersistedLogSegment(val level: String = "", val text: String = "")
+data class PersistedLogSegment(val level: String = "", val text: String = "", val newLine: Boolean = false)
 
 /**
  * A flat, Jackson-friendly mirror of [ActivityEvent] for on-disk storage - the sealed
@@ -57,7 +57,7 @@ fun ActivityEvent.toPersisted(): PersistedActivityEvent = when (this) {
 
     is ActivityEvent.Log -> PersistedActivityEvent(
         type = "log", timestampMs = timestamp.toEpochMilli(),
-        segments = segments.map { PersistedLogSegment(it.level, it.text) },
+        segments = segments.map { PersistedLogSegment(it.level, it.text, it.newLine) },
     )
 }
 

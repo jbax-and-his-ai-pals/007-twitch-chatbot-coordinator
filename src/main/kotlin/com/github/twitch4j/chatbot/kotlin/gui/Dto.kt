@@ -68,9 +68,9 @@ fun CooldownSnapshot.toDto() = CooldownSnapshotDto(
 )
 
 @Serializable
-data class LogSegmentDto(val level: String, val text: String)
+data class LogSegmentDto(val level: String, val text: String, val newLine: Boolean = false)
 
-fun LogSegment.toDto() = LogSegmentDto(level, text)
+fun LogSegment.toDto() = LogSegmentDto(level, text, newLine)
 
 @Serializable
 data class ActivityEventDto(
@@ -142,7 +142,7 @@ fun PersistedActivityEvent.toDto() = ActivityEventDto(
     prompt = prompt,
     response = response,
     mocked = mocked,
-    segments = segments?.map { LogSegmentDto(it.level, it.text) },
+    segments = segments?.map { LogSegmentDto(it.level, it.text, it.newLine) },
 )
 
 @Serializable

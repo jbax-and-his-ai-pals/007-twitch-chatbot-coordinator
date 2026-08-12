@@ -228,12 +228,34 @@ function buildFeedEntryEl(evt) {
     const segments = evt.segments || [];
     const tagLevel = (segments[0] && segments[0].level) || "message";
     row.classList.add("feed-entry-log");
-    const segmentsHtml = segments
+
+    // One log event can now cover several printed lines (one dispatched chat message's
+    // whole diagnostic cascade) - split the flat segment list back into lines using each
+    // segment's newLine marker, so multi-line entries render as actual separate lines.
+    const lines = [];
+    let currentLine = [];
+    segments.forEach((seg) => {
+      currentLine.push(seg);
+      if (seg.newLine) {
+        lines.push(currentLine);
+        currentLine = [];
+      }
+    });
+    if (currentLine.length) lines.push(currentLine);
+
+    const lineHtml = (segs) => segs
       .map((seg) => `<span class="${LOG_TEXT_CLASS[seg.level] || "log-text-message"}">${escapeHtml(seg.text)}</span>`)
       .join("");
+
+    const firstLineHtml = lines.length ? lineHtml(lines[0]) : "";
+    const continuationHtml = lines.slice(1)
+      .map((line) => `<div class="feed-log-continuation">${lineHtml(line)}</div>`)
+      .join("");
+
     row.innerHTML = `<span class="feed-time">${timeStr(evt.timestampMs)}</span>` +
       `<span class="feed-tag ${LOG_TAG_CLASS[tagLevel] || "tag-log-message"}">LOG</span>` +
-      `<span class="feed-log-text">${segmentsHtml}</span>`;
+      `<span class="feed-log-text">${firstLineHtml}</span>` +
+      continuationHtml;
   }
 
   return row;

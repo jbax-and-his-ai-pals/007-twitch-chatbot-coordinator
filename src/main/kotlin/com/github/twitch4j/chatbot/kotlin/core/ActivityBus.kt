@@ -61,8 +61,13 @@ sealed class ActivityEvent {
  * One colored fragment of a console line. [level] is a loose category (error/warn/success/
  * callout/highlight/info/message) taken from whichever [Messaging] color produced it - not
  * a strict enum, just enough for the GUI to pick a matching text color per fragment.
+ *
+ * [newLine] marks the last fragment of a completed line - since [ActivityEvent.Log] now
+ * batches every line from one dispatched chat message into a single event (see
+ * [Messaging.beginBatch]), this is how the flat [ActivityEvent.Log.segments] list still
+ * marks where one printed line ends and the next begins.
  */
-data class LogSegment(val level: String, val text: String)
+data class LogSegment(val level: String, val text: String, val newLine: Boolean = false)
 
 /**
  * Broadcasts [ActivityEvent]s to any number of listeners (the GUI's WebSocket route being

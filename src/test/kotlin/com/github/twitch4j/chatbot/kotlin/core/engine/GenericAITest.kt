@@ -25,6 +25,18 @@ class GenericAITest {
     }
 
     @Test
+    fun `transform's prompt instructs the model to preserve the original message's casing`() {
+        val fake = FakeAIClient(response = "whatever")
+        val ai = GenericAI(fake)
+
+        ai.transform(testBotDefinition(), "Some MiXed Case Text", "BLAMP")
+
+        val prompt = fake.prompts.single()
+        assertTrue(prompt.contains("preserve the exact capitalization", ignoreCase = true))
+        assertTrue(prompt.contains("do not lowercase", ignoreCase = true))
+    }
+
+    @Test
     fun `wisdom retries until the client returns a non-empty response`() {
         var callCount = 0
         val fake = FakeAIClient()

@@ -122,14 +122,24 @@ class Controller(private val configuration: Configuration) {
         try {
             dispatch(event)
         } catch (e: Exception) {
+            // Its own batch, separate from dispatch()'s (already flushed via its own
+            // finally) - guarantees this is never silently dropped by a later beginBatch().
+            Messaging.beginBatch()
             Messaging.error(e.stackTraceToString())
+            Messaging.endBatch()
         }
     }
 
+    /** One multi-line log entry per dispatched message - see [Messaging.beginBatch]. */
     private fun dispatch(event: ChannelMessageEvent) {
-        Messaging.message("${event.channel.name} - ${event.user.name} - \"${event.message}\"")
-        activityBus.publish(ActivityEvent.Incoming(channel = event.channel.name, user = event.user.name, message = event.message))
-        MessageDispatcher.dispatch(admin.enabledPersonalities(), event, Scheduler::pickActor)
+        Messaging.beginBatch()
+        try {
+            Messaging.message("${event.channel.name} - ${event.user.name} - \"${event.message}\"")
+            activityBus.publish(ActivityEvent.Incoming(channel = event.channel.name, user = event.user.name, message = event.message))
+            MessageDispatcher.dispatch(admin.enabledPersonalities(), event, Scheduler::pickActor)
+        } finally {
+            Messaging.endBatch()
+        }
     }
 
     private fun createClient(bot: BotDefinition): ITwitchClient {

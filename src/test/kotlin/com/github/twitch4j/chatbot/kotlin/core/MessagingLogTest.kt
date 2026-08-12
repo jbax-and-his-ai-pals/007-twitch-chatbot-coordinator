@@ -2,6 +2,7 @@ package com.github.twitch4j.chatbot.kotlin.core
 
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -98,5 +99,87 @@ class MessagingLogTest {
     fun `does not throw when no bus is set`() {
         Messaging.bus = null
         Messaging.info("no listener around")
+    }
+
+    @Test
+    fun `beginBatch through endBatch collects every completed line into a single Log event`() {
+        val logs = published {
+            Messaging.beginBatch()
+            Messaging.info("first line")
+            Messaging.error("second line")
+            Messaging.endBatch()
+        }
+
+        assertEquals(1, logs.size)
+        val text = logs.single().fullText()
+        assertTrue(text.contains("first line"))
+        assertTrue(text.contains("second line"))
+    }
+
+    @Test
+    fun `each completed line inside a batch keeps its own level and is marked with newLine`() {
+        val logs = published {
+            Messaging.beginBatch()
+            Messaging.info("line one")
+            Messaging.error("line two")
+            Messaging.endBatch()
+        }
+
+        val segments = logs.single().segments
+        assertEquals(2, segments.size)
+        assertEquals("warn", segments[0].level)
+        assertTrue(segments[0].newLine)
+        assertEquals("error", segments[1].level)
+        assertTrue(segments[1].newLine)
+    }
+
+    @Test
+    fun `a multi-fragment line inside a batch only marks its own last fragment with newLine`() {
+        val logs = published {
+            Messaging.beginBatch()
+            Messaging.info("COOLDOWNS: ", addNewLine = false)
+            Messaging.green(" [MAINLINE]")
+            Messaging.error("second line")
+            Messaging.endBatch()
+        }
+
+        val segments = logs.single().segments
+        assertEquals(3, segments.size)
+        assertFalse(segments[0].newLine)
+        assertTrue(segments[1].newLine)
+        assertTrue(segments[2].newLine)
+    }
+
+    @Test
+    fun `endBatch with nothing collected publishes no event`() {
+        val logs = published {
+            Messaging.beginBatch()
+            Messaging.endBatch()
+        }
+
+        assertTrue(logs.isEmpty())
+    }
+
+    @Test
+    fun `endBatch without a prior beginBatch is a safe no-op`() {
+        val logs = published { Messaging.endBatch() }
+
+        assertTrue(logs.isEmpty())
+    }
+
+    @Test
+    fun `lines emitted outside a batch still publish immediately, one event per line`() {
+        val logs = published {
+            Messaging.info("before batch")
+            Messaging.beginBatch()
+            Messaging.info("inside batch")
+            Messaging.endBatch()
+            Messaging.info("after batch")
+        }
+
+        assertEquals(3, logs.size)
+        assertTrue(logs[0].fullText().contains("before batch"))
+        assertTrue(logs[1].fullText().contains("inside batch"))
+        assertTrue(logs[2].fullText().contains("after batch"))
     }
 }

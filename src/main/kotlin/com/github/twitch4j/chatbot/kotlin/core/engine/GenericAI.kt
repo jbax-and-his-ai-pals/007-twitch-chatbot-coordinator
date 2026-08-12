@@ -71,7 +71,11 @@ class GenericAI(private val aiClient: AIClient = AIModel) {
         }
 
     fun transform(bot: BotDefinition, str: String, word: String): String =
-        generateOnce(buildPrompt(bot, word, bot.prompts.transform) + " \"$str\"")
+        generateOnce(
+            buildPrompt(bot, word, bot.prompts.transform) +
+                " preserve the exact capitalization of every word you don't replace - do not lowercase " +
+                "the string or otherwise change its casing; \"$str\""
+        )
 
     fun wisdom(bot: BotDefinition): String =
         generateWithRetry(buildPrompt(bot, defaultWord(bot), bot.prompts.wisdom), "WISDOM")

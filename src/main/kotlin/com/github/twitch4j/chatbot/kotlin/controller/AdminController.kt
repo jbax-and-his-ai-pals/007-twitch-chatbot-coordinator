@@ -235,7 +235,13 @@ class AdminController(
         activityBus.publish(ActivityEvent.Incoming(channel = resolvedChannel, user = user, message = message, simulated = true))
 
         val event = buildSimulatedEvent(resolvedChannel, user, message)
-        MessageDispatcher.dispatch(enabledPersonalities(), event, Scheduler::pickActor)
+        // One multi-line log entry per dispatched message - see Messaging.beginBatch.
+        Messaging.beginBatch()
+        try {
+            MessageDispatcher.dispatch(enabledPersonalities(), event, Scheduler::pickActor)
+        } finally {
+            Messaging.endBatch()
+        }
         return true
     }
 

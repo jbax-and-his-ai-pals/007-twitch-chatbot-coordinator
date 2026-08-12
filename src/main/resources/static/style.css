@@ -342,6 +342,11 @@ body {
 
 .feed-entry-log { opacity: 0.95; }
 .feed-log-text { color: var(--text-dim); }
+.feed-log-continuation {
+  padding-left: 62px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
 .log-text-error { color: var(--red); }
 .log-text-warn { color: var(--yellow); }
 .log-text-success { color: var(--green); }
