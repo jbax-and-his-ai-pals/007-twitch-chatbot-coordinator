@@ -445,24 +445,50 @@ body {
   display: none;
 }
 
+.cooldowns { margin-top: 10px; }
+
 .cooldown-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 7px;
   font-size: 12px;
 }
 .cooldown-name { width: 64px; color: var(--text-dim); text-transform: uppercase; font-size: 10px; letter-spacing: 0.04em; }
 .cooldown-bar-track {
   flex: 1;
-  height: 6px;
+  height: 8px;
   background: var(--panel-alt);
   border-radius: 4px;
   overflow: hidden;
 }
-.cooldown-bar-fill { height: 100%; background: var(--yellow); transition: width 0.3s linear; }
-.cooldown-bar-fill.ready { background: var(--green); }
+.cooldown-bar-fill {
+  height: 100%;
+  background: var(--yellow);
+  transition: width 0.3s linear, background-color 0.3s linear, box-shadow 0.3s linear;
+}
+/* Distinct hue per cooldown type, so the row is scannable by color at a glance. */
+.cooldown-bar-fill-mainline { background: var(--accent); }
+.cooldown-bar-fill-wisdom { background: var(--cyan); }
+.cooldown-bar-fill-callout { background: var(--purple); }
+.cooldown-bar-fill-retry { background: var(--red); }
+.cooldown-bar-fill-request { background: var(--yellow); }
+.cooldown-bar-fill.ready { background: var(--green); box-shadow: 0 0 6px rgba(74, 222, 128, 0.65); }
 .cooldown-val { width: 44px; text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+/* The mainline timer (blamp/butt/etc) is the one thing worth glancing at without
+   expanding a card - bigger bar, bolder label using the bot's own transform word. */
+.cooldown-row-mainline { margin-bottom: 10px; }
+.cooldown-row-mainline .cooldown-name {
+  width: auto;
+  min-width: 60px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.03em;
+}
+.cooldown-row-mainline .cooldown-bar-track { height: 14px; border-radius: 6px; }
+.cooldown-row-mainline .cooldown-val { width: 54px; font-size: 13px; font-weight: 700; color: var(--text); }
 .cooldown-expire {
   background: none;
   border: 1px solid var(--border);

@@ -559,14 +559,21 @@ function connectWebSocket() {
 // Bot cards: cooldown bars, send-as, recent messages
 // ==================================================================================
 
-function cooldownBarHtml(botKey, type, status) {
-  // The snapshot only reports remaining time, not the configured interval, so the bar
-  // is a simple ready/not-ready indicator rather than a proportional countdown.
+/** [displayName] is the bot's own transform word (e.g. "BLAMP") for the mainline row, the type name for the other four. */
+function cooldownBarHtml(botKey, type, status, displayName) {
   const seconds = (status.remainingMs / 1000).toFixed(1);
+  const progressPct = status.configuredMs > 0
+    ? Math.round(((status.configuredMs - status.remainingMs) / status.configuredMs) * 100)
+    : 100;
+  const pct = status.ready ? 100 : Math.min(100, Math.max(0, progressPct));
+  const isMainline = type === "mainline";
+
   return `
-    <div class="cooldown-row" data-bot="${botKey}" data-type="${type}">
-      <span class="cooldown-name">${type}</span>
-      <div class="cooldown-bar-track"><div class="cooldown-bar-fill ${status.ready ? "ready" : ""}" style="width:${status.ready ? 0 : 100}%"></div></div>
+    <div class="cooldown-row${isMainline ? " cooldown-row-mainline" : ""}" data-bot="${botKey}" data-type="${type}">
+      <span class="cooldown-name">${escapeHtml(displayName)}</span>
+      <div class="cooldown-bar-track">
+        <div class="cooldown-bar-fill cooldown-bar-fill-${type} ${status.ready ? "ready" : ""}" style="width:${pct}%"></div>
+      </div>
       <span class="cooldown-val">${status.ready ? "ready" : seconds + "s"}</span>
       <button class="cooldown-expire" title="Expire now">&#9199;</button>
     </div>`;
@@ -574,7 +581,10 @@ function cooldownBarHtml(botKey, type, status) {
 
 function renderBotCard(bot) {
   const card = document.createElement("div");
-  card.className = "bot-card" + (bot.enabled ? "" : " bot-disabled");
+  // Collapsed by default - the cooldown bars just below the header (outside .card-body,
+  // so they stay visible either way) are the front-and-center summary; everything else
+  // (send-as, recent messages, full config) is a deliberate expand.
+  card.className = "bot-card collapsed" + (bot.enabled ? "" : " bot-disabled");
   card.dataset.botKey = bot.key;
   card.innerHTML = `
     <div class="bot-card-header">
@@ -584,9 +594,9 @@ function renderBotCard(bot) {
         <span class="slider"></span>
       </label>
     </div>
+    <div class="cooldowns"></div>
     <div class="card-body">
       <div class="bot-meta">${escapeHtml(bot.accountUsername)} &middot; mood: ${escapeHtml(bot.activeMood)} &middot; ${escapeHtml(bot.channel)}</div>
-      <div class="cooldowns"></div>
       <form class="send-form">
         <input type="text" placeholder="Send as ${escapeHtml(bot.key)}..." />
         <button type="submit">Send</button>
@@ -606,9 +616,11 @@ function renderBotCard(bot) {
     card.classList.toggle("bot-disabled", !e.target.checked);
   });
 
-  card.querySelector("form").addEventListener("submit", async (e) => {
+  card.querySelector(".send-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const input = card.querySelector("input");
+    // Scoped to the form itself, not card.querySelector("input") - the enable/disable
+    // checkbox in .bot-card-header comes first in DOM order and would win instead.
+    const input = e.target.querySelector("input");
     const message = input.value.trim();
     if (!message) return;
     await api("/send", { method: "POST", body: JSON.stringify({ botKey: bot.key, message }) });
@@ -1184,7 +1196,9 @@ async function refreshCooldowns() {
     try {
       const snapshot = await api(`/cooldowns/${encodeURIComponent(bot.key)}`);
       const container = card.querySelector(".cooldowns");
-      container.innerHTML = COOLDOWN_TYPES.map((t) => cooldownBarHtml(bot.key, t, snapshot[t])).join("");
+      container.innerHTML = COOLDOWN_TYPES
+        .map((t) => cooldownBarHtml(bot.key, t, snapshot[t], t === "mainline" ? snapshot.label : t))
+        .join("");
       container.querySelectorAll(".cooldown-expire").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const row = btn.closest(".cooldown-row");
