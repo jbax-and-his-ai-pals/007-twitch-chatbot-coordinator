@@ -5,10 +5,11 @@ import kotlin.random.Random
 /**
  * Production stand-in for the real Gemini-backed [AIClient], used when the GUI's mock
  * mode is on so testing never costs money or hits the network. Derives its default
- * response from the prompt itself (rather than a fixed string) so any text substituted
- * into the prompt - like a viewer's username in a hello-back prompt - survives into the
- * response, keeping downstream checks that require it (e.g. "response must contain the
- * user's name") satisfied on the first try instead of burning through retries.
+ * response from the prompt itself (rather than a fixed string) so text the prompt requires
+ * to survive - the bot's configured transform word, a viewer's username in a hello-back
+ * prompt - actually ends up in the response, keeping downstream checks that require it
+ * (e.g. "response must contain the user's name") satisfied on the first try instead of
+ * burning through retries.
  *
  * For the mainline transform specifically, [defaultResponse] does the same job the real
  * transform prompt asks Gemini to do, the simplest way possible: swap one word of the
@@ -16,6 +17,13 @@ import kotlin.random.Random
  * etc.) - both to look like a plausible transform in the GUI, and because
  * [com.github.twitch4j.chatbot.kotlin.core.engine.TransformedMessage] requires the response
  * to actually contain that word, which a generic mock response almost never does.
+ *
+ * For hello-back specifically, [defaultResponse] pulls the username out of
+ * [com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI.helloBack]'s trailing "your
+ * response must include this user's name" instruction and builds a canned greeting around
+ * it - a plain tail-slice of the prompt can't guarantee that, since (unlike transform/
+ * request) nothing quotes the username, so a long enough configured hello prompt pushes it
+ * right off the front of the slice.
  *
  * [overrides] lets the GUI script specific scenarios: any prompt containing a given
  * keyword (case-insensitive) returns that canned response instead of the default.
@@ -57,13 +65,16 @@ class MockAIClient(private val maxLogSize: Int = 200) : AIClient {
     /**
      * Every prompt built by [com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI] leads
      * with bot-specific instructions and trails with the actual subject matter (a quoted
-     * string, a request, a filled-in username). For transform/request prompts specifically,
-     * that subject matter is quoted at the very end - when that shape is present alongside
-     * [GenericAI]'s fixed preamble (which always names the configured word, e.g. "don't
-     * repeat BUTT over and over"), swap one word of it for that word instead of falling back
-     * to a plain tail slice.
+     * string, a request, a filled-in username). Checked in order of how specific the shape
+     * is: a hello-back's explicit username instruction first, then the transform/request
+     * quoted-string shape, and only then the generic tail slice.
      */
     private fun defaultResponse(prompt: String): String {
+        val helloUser = helloUserPattern.find(prompt)?.groupValues?.get(1)
+        if (!helloUser.isNullOrBlank()) {
+            return "[MOCK] hey there, $helloUser!"
+        }
+
         val quoted = trailingQuotedPattern.find(prompt)?.groupValues?.get(1)
         val word = transformWordPattern.find(prompt)?.groupValues?.get(1)?.lowercase()
 
@@ -84,5 +95,6 @@ class MockAIClient(private val maxLogSize: Int = 200) : AIClient {
     companion object {
         private val transformWordPattern = Regex("don't repeat (\\S+) over and over")
         private val trailingQuotedPattern = Regex("\"([^\"]*)\"\\s*$")
+        private val helloUserPattern = Regex("your response must include this user's name: \"([^\"]*)\"")
     }
 }

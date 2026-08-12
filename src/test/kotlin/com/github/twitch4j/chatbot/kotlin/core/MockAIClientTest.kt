@@ -150,4 +150,48 @@ class MockAIClientTest {
 
         assertEquals("a canned transform result", response)
     }
+
+    // ---- Hello-back-shaped prompts: pull the username from the explicit instruction -----
+
+    /** Mirrors what GenericAI.helloBack actually builds: preamble, a mood's filled-in greeting, then the trailing name instruction. */
+    private fun helloBackPrompt(userName: String, moodText: String) =
+        "you are buttsbot; when, you respond, do NOT return a string with all caps; this is a big no-no; " +
+            "don't repeat BUTT over and over in sequence; don't repeat yourself at the end of your response; " +
+            "don't trim the response endings; don't leave off the last letter in your responses; " +
+            "go get 'em, ace! here are your instructions: $userName $moodText " +
+            "your response must include this user's name: \"$userName\""
+
+    @Test
+    fun `a hello-back-shaped prompt returns a canned greeting containing the username`() {
+        val client = MockAIClient()
+
+        val response = client.generateContent(helloBackPrompt("someviewer", "has just said hello to you, respond in kind"))
+
+        assertTrue(response.contains("someviewer"), "expected the username to survive, was: $response")
+        assertTrue(response.startsWith("[MOCK]"))
+    }
+
+    @Test
+    fun `a hello-back prompt's username survives even when a long mood prompt would push it past a tail-slice window`() {
+        val client = MockAIClient()
+        // Long enough that the old tail-slice fallback (last 120 chars of the whole prompt)
+        // would have cut the username off the front of the filled-in mood text entirely -
+        // this is exactly what buttsbot's "mean" mood prompt does in the real config.
+        val longMoodText = "is a no good terrible person who has just said hello to you. could you provide a " +
+            "medium-length, crude response? just the response, please"
+
+        val response = client.generateContent(helloBackPrompt("someviewer", longMoodText))
+
+        assertTrue(response.contains("someviewer"), "expected the username to survive a long mood prompt, was: $response")
+    }
+
+    @Test
+    fun `an override still wins over the hello-back canned greeting`() {
+        val client = MockAIClient()
+        client.setOverride("someviewer", "a canned hello response")
+
+        val response = client.generateContent(helloBackPrompt("someviewer", "has just said hello to you"))
+
+        assertEquals("a canned hello response", response)
+    }
 }

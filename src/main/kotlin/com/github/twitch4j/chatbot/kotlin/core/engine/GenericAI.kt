@@ -85,6 +85,9 @@ class GenericAI(private val aiClient: AIClient = AIModel) {
 
     fun helloBack(bot: BotDefinition, userName: String): String {
         val helloPrompt = bot.activeMood.helloPrompt.replace("[user]", userName)
-        return generateOnce(buildPrompt(bot, defaultWord(bot), helloPrompt))
+        return generateOnce(
+            buildPrompt(bot, defaultWord(bot), helloPrompt) +
+                " your response must include this user's name: \"$userName\""
+        )
     }
 }

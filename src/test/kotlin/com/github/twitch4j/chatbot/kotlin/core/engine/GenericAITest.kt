@@ -90,4 +90,19 @@ class GenericAITest {
 
         assertTrue(fake.prompts.single().contains("say hi to someviewer"))
     }
+
+    @Test
+    fun `helloBack's prompt explicitly instructs the model to include the user's name in its reply`() {
+        // A long configured mood prompt pushed the username off the end of MockAIClient's
+        // tail-slice fallback in mock mode, since nothing quoted it - this explicit trailing
+        // instruction gives MockAIClient a reliable marker to pull the username from
+        // (see MockAIClient.helloUserPattern) and doubles as a clearer ask for real Gemini too.
+        val fake = FakeAIClient()
+        val ai = GenericAI(fake)
+
+        ai.helloBack(testBotDefinition(), "someviewer")
+
+        val prompt = fake.prompts.single()
+        assertTrue(prompt.contains("your response must include this user's name: \"someviewer\""))
+    }
 }
