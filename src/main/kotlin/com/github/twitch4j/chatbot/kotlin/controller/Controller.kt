@@ -58,7 +58,9 @@ class Controller(private val configuration: Configuration) {
     private val clients: Map<String, ITwitchClient> = definitions.associate { it.key to createClient(it) }
 
     private val activityBus = ActivityBus().also { Messaging.bus = it }
-    private val mockModeState = MockModeState()
+    // The app itself starts on the real API - see MockModeState's own default for why the
+    // class default stays mocked (every other, test-facing construction site relies on it).
+    private val mockModeState = MockModeState(initiallyEnabled = false)
     private val mockAiClient = MockAIClient()
     private val commonConfig = CommonConfig.from(configuration.defaults)
 

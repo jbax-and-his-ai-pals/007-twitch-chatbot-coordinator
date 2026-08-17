@@ -6,8 +6,13 @@ package com.github.twitch4j.chatbot.kotlin.core
  * no per-bot mock toggle today, since testing is almost always an all-or-nothing "don't
  * spend money right now" concern.
  *
- * Defaults to mocked so the app never talks to the real (billed) API unless someone
- * deliberately opts in via the GUI.
+ * Defaults to mocked - every test construction site relies on this implicitly, so tests
+ * never accidentally hit the real (billed) API. The running app is the one deliberate
+ * exception: [com.github.twitch4j.chatbot.kotlin.controller.Controller] explicitly starts
+ * on the real API instead (`initiallyEnabled = false`), so a fresh run is live by default
+ * and mock mode is something you opt *into* via the GUI, not out of. This toggle is never
+ * persisted across restarts either way - every run starts from whichever of these two
+ * defaults constructed it.
  */
 class MockModeState(initiallyEnabled: Boolean = true) {
     @Volatile
