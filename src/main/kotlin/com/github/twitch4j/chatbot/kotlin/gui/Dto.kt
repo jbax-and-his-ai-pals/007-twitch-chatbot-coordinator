@@ -11,6 +11,9 @@ import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownStatus
 import com.github.twitch4j.chatbot.kotlin.core.LogSegment
 import com.github.twitch4j.chatbot.kotlin.core.PersistedActivityEvent
+import com.github.twitch4j.chatbot.kotlin.core.QualityReport
+import com.github.twitch4j.chatbot.kotlin.core.ReactionDetail
+import com.github.twitch4j.chatbot.kotlin.core.ScoredResponse
 import kotlinx.serialization.Serializable
 
 /**
@@ -280,4 +283,61 @@ fun CommonConfigDetail.toDto() = CommonConfigDetailDto(
     forbiddenWords = forbiddenWords,
     calloutResponseOverrides = calloutResponseOverrides,
     helloTriggers = helloTriggers.map { it.toDto() },
+)
+
+@Serializable
+data class ReactionDetailDto(val user: String, val message: String, val classification: String)
+
+fun ReactionDetail.toDto() = ReactionDetailDto(user = user, message = message, classification = classification.name)
+
+@Serializable
+data class ScoredResponseDto(
+    val botKey: String,
+    val timestampMs: Long,
+    val sourceUser: String?,
+    val sourceMessage: String?,
+    val response: String,
+    val prompt: String,
+    val score: Int,
+    val reactions: List<ReactionDetailDto>,
+)
+
+fun ScoredResponse.toDto() = ScoredResponseDto(
+    botKey = botKey,
+    timestampMs = timestamp.toEpochMilli(),
+    sourceUser = sourceUser,
+    sourceMessage = sourceMessage,
+    response = response,
+    prompt = prompt,
+    score = score,
+    reactions = reactions.map { it.toDto() },
+)
+
+@Serializable
+data class QualityReportDto(
+    val days: Int,
+    val fromDate: String,
+    val toDate: String,
+    val totalCandidateResponses: Int,
+    val respondedCount: Int,
+    val explicitYesCount: Int,
+    val explicitNoCount: Int,
+    val explicitWhyCount: Int,
+    val bestResponses: List<ScoredResponseDto>,
+    val worstResponses: List<ScoredResponseDto>,
+    val recommendation: String?,
+)
+
+fun QualityReport.toDto() = QualityReportDto(
+    days = days,
+    fromDate = fromDate.toString(),
+    toDate = toDate.toString(),
+    totalCandidateResponses = totalCandidateResponses,
+    respondedCount = respondedCount,
+    explicitYesCount = explicitYesCount,
+    explicitNoCount = explicitNoCount,
+    explicitWhyCount = explicitWhyCount,
+    bestResponses = bestResponses.map { it.toDto() },
+    worstResponses = worstResponses.map { it.toDto() },
+    recommendation = recommendation,
 )

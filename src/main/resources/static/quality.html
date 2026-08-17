@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>blamputts response quality</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Response quality report</h1>
+    <a class="quality-back-link" href="/">&larr; back to control panel</a>
+  </header>
+
+  <main class="quality-layout">
+    <p class="hint">
+      Mines the persisted activity logs for direct chat reactions to the bots' AI-generated
+      responses - separate from the live control panel, reads nothing but past logs. Only
+      counts reactions that actually name a bot (e.g. "@blampbot LUL", "blampbot no"), and
+      only scores real (non-mocked) responses.
+    </p>
+
+    <div class="quality-controls">
+      <label class="quality-days-label">
+        Days to analyze
+        <input type="number" id="qualityDays" value="7" min="1" max="90" />
+      </label>
+      <button type="button" id="generateReportBtn">Generate report</button>
+      <span id="qualityStatus" class="quality-status"></span>
+    </div>
+
+    <div id="qualityReport" class="quality-report" style="display:none">
+      <div id="qualitySummary" class="quality-summary"></div>
+      <div id="qualityRecommendation" class="quality-recommendation"></div>
+
+      <section>
+        <h2>Best responses</h2>
+        <div id="qualityBest" class="quality-response-list"></div>
+      </section>
+
+      <section>
+        <h2>Worst responses</h2>
+        <div id="qualityWorst" class="quality-response-list"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/quality.js"></script>
+</body>
+</html>

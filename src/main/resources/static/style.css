@@ -930,4 +930,132 @@ body {
   color: #10121a;
   font-weight: 600;
 }
+
+/* ================================================================================
+   Response quality report (quality.html) - deliberately separate page from the live
+   control panel, so it reuses the same dark theme tokens/buttons but gets its own layout.
+   ================================================================================ */
+
+.quality-back-link {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-decoration: none;
+}
+.quality-back-link:hover { color: var(--accent); }
+
+.quality-layout {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.quality-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.quality-days-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.quality-days-label input {
+  width: 60px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.quality-controls button {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #10121a;
+  border-radius: 4px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+.quality-controls button:disabled { opacity: 0.6; cursor: default; }
+.quality-status { font-size: 12px; color: var(--text-dim); }
+
+.quality-report { display: flex; flex-direction: column; gap: 16px; }
+
+.quality-summary, .quality-recommendation {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.quality-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.quality-summary-row:last-child { border-bottom: none; }
+.quality-summary-row span:first-child { color: var(--text-dim); }
+
+.quality-recommendation h2, .quality-layout section h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+.quality-recommendation-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+.quality-empty { color: var(--text-dim); font-size: 12px; font-style: italic; }
+
+.quality-response-list { display: flex; flex-direction: column; gap: 10px; }
+.quality-response-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.quality-response-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.quality-bot { font-weight: 700; color: var(--green); }
+.quality-score { font-variant-numeric: tabular-nums; color: var(--text-dim); }
+.quality-score-positive { color: var(--green); }
+.quality-score-negative { color: var(--red); }
+.quality-time { margin-left: auto; color: var(--text-dim); }
+
+.quality-field { font-size: 13px; margin-bottom: 4px; overflow-wrap: anywhere; }
+.quality-field-label { color: var(--text-dim); margin-right: 4px; }
+.quality-source-user { color: var(--text-dim); font-size: 12px; }
+
+.quality-reactions { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.quality-reaction { font-size: 12px; overflow-wrap: anywhere; }
+.quality-reaction-user { color: var(--accent); }
+.quality-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 6px;
+  letter-spacing: 0.03em;
+}
+.quality-tag-positive { background: rgba(74,222,128,0.15); color: var(--green); }
+.quality-tag-negative { background: rgba(248,113,113,0.15); color: var(--red); }
+.quality-tag-neutral { background: rgba(154,160,176,0.15); color: var(--text-dim); }
 #editModalSave:hover { opacity: 0.9; }

@@ -16,10 +16,12 @@ import com.github.twitch4j.chatbot.kotlin.core.MessageDispatcher
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.Personality
+import com.github.twitch4j.chatbot.kotlin.core.ResponseQualityAnalyzer
 import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
 import com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI
+import com.github.twitch4j.chatbot.kotlin.core.engine.TriggerMatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -80,6 +82,15 @@ class Controller(private val configuration: Configuration) {
     private val statePersistence = StatePersistence(File("data/state.json"))
     private val activityLog = ActivityLog(File("data/logs"))
 
+    // Read-only over the persisted logs, entirely offline from live bot state - shares the
+    // mock/real toggle everything else uses, so a report generated while mock mode is on
+    // costs nothing (and its recommendation is worth exactly that much).
+    private val qualityAnalyzer = ResponseQualityAnalyzer(
+        activityLog = activityLog,
+        botReferenceForms = definitions.associate { it.key to TriggerMatcher.referenceForms(it.triggerKeywords) },
+        aiClient = SwitchableAIClient(botKey = "quality-analyzer", state = mockModeState, activityBus = activityBus, mock = mockAiClient),
+    )
+
     // Only used to launch ActivityLog's background collector - never cancelled, since this
     // process has no formal shutdown path today (matches how the rest of the app runs until
     // killed); acceptable for a local, personal tool.
@@ -95,6 +106,7 @@ class Controller(private val configuration: Configuration) {
         commonConfig = commonConfig,
         statePersistence = statePersistence,
         activityLog = activityLog,
+        qualityAnalyzer = qualityAnalyzer,
     )
 
     init {

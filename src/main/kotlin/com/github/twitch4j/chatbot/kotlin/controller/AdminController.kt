@@ -25,6 +25,8 @@ import com.github.twitch4j.chatbot.kotlin.core.PersistedHelloTrigger
 import com.github.twitch4j.chatbot.kotlin.core.PersistedPrompts
 import com.github.twitch4j.chatbot.kotlin.core.PersistedState
 import com.github.twitch4j.chatbot.kotlin.core.PersistedTransformWord
+import com.github.twitch4j.chatbot.kotlin.core.QualityReport
+import com.github.twitch4j.chatbot.kotlin.core.ResponseQualityAnalyzer
 import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.TransformWord
 import com.github.twitch4j.common.events.domain.EventChannel
@@ -129,6 +131,7 @@ class AdminController(
     private val commonConfig: CommonConfig,
     private val statePersistence: StatePersistence? = null,
     private val activityLog: ActivityLog? = null,
+    private val qualityAnalyzer: ResponseQualityAnalyzer? = null,
 ) {
     private val personalityByKey = personalities.associateBy { it.name }
     private val disabledBots = mutableSetOf<String>()
@@ -213,6 +216,16 @@ class AdminController(
 
     /** Every event logged on [date], oldest first - empty if [activityLog] wasn't enabled or nothing was logged that day. */
     fun activityHistoryFor(date: LocalDate): List<PersistedActivityEvent> = activityLog?.readDate(date) ?: emptyList()
+
+    /**
+     * Mines the last [days] days of persisted activity logs for response-quality signal -
+     * entirely offline from live bot state, see [ResponseQualityAnalyzer]. Null if no
+     * analyzer was configured (activity logging disabled) or [days] isn't positive.
+     */
+    fun generateQualityReport(days: Int): QualityReport? {
+        if (days < 1) return null
+        return qualityAnalyzer?.analyze(days)
+    }
 
     fun mockOverrides(): Map<String, String> = mockAiClient.overridesSnapshot()
 

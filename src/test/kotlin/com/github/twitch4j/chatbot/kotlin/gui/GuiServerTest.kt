@@ -6,12 +6,14 @@ import com.github.twitch4j.chatbot.kotlin.controller.AdminController
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.ActivityLog
+import com.github.twitch4j.chatbot.kotlin.core.AIClient
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.MoodConfig
+import com.github.twitch4j.chatbot.kotlin.core.ResponseQualityAnalyzer
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
 import com.github.twitch4j.chatbot.kotlin.core.engine.FakeAIClient
 import com.github.twitch4j.chatbot.kotlin.core.engine.GenericAI
@@ -39,6 +41,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 
 /**
@@ -635,5 +638,87 @@ class GuiServerTest {
 
         val badResponse = client.get("/api/activity/history/not-a-date")
         assertEquals(HttpStatusCode.BadRequest, badResponse.status)
+    }
+
+    private fun adminWithQualityAnalyzer(analyzer: ResponseQualityAnalyzer?): AdminController {
+        val client: ITwitchClient = mockk(relaxed = true)
+        every { client.chat } returns mockk(relaxed = true)
+        val personality = ConfiguredPersonality(
+            bot = testBotDefinition(key = "blampbot", accountUsername = "blampbot", triggerKeywords = listOf("blampbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(FakeAIClient()),
+            activityBus = ActivityBus(),
+        )
+        return AdminController(
+            personalities = listOf(personality),
+            clients = mapOf("blampbot" to client),
+            activityBus = ActivityBus(),
+            mockModeState = MockModeState(),
+            mockAiClient = MockAIClient(),
+            commonConfig = CommonConfig(),
+            qualityAnalyzer = analyzer,
+        )
+    }
+
+    @Test
+    fun `GET api quality report analyzes the persisted logs and defaults to 7 days`(@TempDir dir: File) = testApplication {
+        val log = ActivityLog(dir)
+        val now = Instant.now()
+        log.append(ActivityEvent.AiCall(botKey = "blampbot", prompt = "a test prompt", response = "the blamptons", mocked = false, timestamp = now.minusSeconds(60)))
+        log.append(
+            ActivityEvent.Outgoing(
+                botKey = "blampbot", channel = "testchannel", message = "the blamptons", manual = false,
+                sourceUser = "someviewer", sourceMessage = "the hamptons", timestamp = now.minusSeconds(59),
+            )
+        )
+        log.append(ActivityEvent.Incoming(channel = "testchannel", user = "reactor", message = "blampbot yes", timestamp = now.minusSeconds(50)))
+
+        val analyzer = ResponseQualityAnalyzer(
+            activityLog = log,
+            botReferenceForms = mapOf("blampbot" to listOf("blampbot", "@blampbot")),
+            aiClient = AIClient { "looks solid" },
+        )
+        val admin = adminWithQualityAnalyzer(analyzer)
+        application { guiModule(admin) }
+
+        val response = client.get("/api/quality/report")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val report = json.decodeFromString<QualityReportDto>(response.bodyAsText())
+        assertEquals(7, report.days)
+        assertEquals(1, report.totalCandidateResponses)
+        assertEquals(1, report.explicitYesCount)
+        assertEquals(1, report.bestResponses.size)
+        assertEquals("the blamptons", report.bestResponses.single().response)
+    }
+
+    @Test
+    fun `GET api quality report honors an explicit days query param, 400 for a non-positive value`(@TempDir dir: File) = testApplication {
+        val analyzer = ResponseQualityAnalyzer(
+            activityLog = ActivityLog(dir),
+            botReferenceForms = mapOf("blampbot" to listOf("blampbot")),
+            aiClient = AIClient { "n/a" },
+        )
+        val admin = adminWithQualityAnalyzer(analyzer)
+        application { guiModule(admin) }
+
+        val response = client.get("/api/quality/report?days=14")
+        assertEquals(HttpStatusCode.OK, response.status)
+        val report = json.decodeFromString<QualityReportDto>(response.bodyAsText())
+        assertEquals(14, report.days)
+
+        val badResponse = client.get("/api/quality/report?days=0")
+        assertEquals(HttpStatusCode.BadRequest, badResponse.status)
+    }
+
+    @Test
+    fun `GET api quality report is unavailable when no analyzer was configured`() = testApplication {
+        val admin = adminWithQualityAnalyzer(null)
+        application { guiModule(admin) }
+
+        val response = client.get("/api/quality/report")
+
+        assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
     }
 }

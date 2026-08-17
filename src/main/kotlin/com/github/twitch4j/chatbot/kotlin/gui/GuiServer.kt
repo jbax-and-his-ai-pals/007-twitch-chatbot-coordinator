@@ -167,6 +167,16 @@ fun Application.guiModule(admin: AdminController) {
                 call.respond(admin.activityHistoryFor(date).map { it.toDto() })
             }
 
+            get("/quality/report") {
+                val days = call.request.queryParameters["days"]?.toIntOrNull() ?: 7
+                if (days < 1) {
+                    call.respond(HttpStatusCode.BadRequest)
+                    return@get
+                }
+                val report = admin.generateQualityReport(days)
+                if (report == null) call.respond(HttpStatusCode.ServiceUnavailable) else call.respond(report.toDto())
+            }
+
             route("/bots/{botKey}") {
                 get("/config") {
                     val botKey = call.parameters["botKey"]!!
