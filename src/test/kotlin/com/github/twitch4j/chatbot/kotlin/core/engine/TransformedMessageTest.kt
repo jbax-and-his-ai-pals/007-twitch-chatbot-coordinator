@@ -107,4 +107,19 @@ class TransformedMessageTest {
 
         assertTrue(result.transformed == "quoted TESTWORD output")
     }
+
+    @Test
+    fun `restores original casing when the model normalizes the whole response to lowercase`() {
+        // Same word count as the original (five words) - "Hamptons" replaced by "TESTWORD",
+        // everything else unchanged apart from the model's stray lowercasing.
+        val ai = GenericAI(FakeAIClient(response = "the TESTWORD are nice today"))
+        val bot = testBotDefinition(similarityThreshold = 0)
+
+        val result = TransformedMessage.fromString(
+            bot, ai, original = "The Hamptons are Nice Today", word = "TESTWORD",
+            fromLastActedUser = false, notEnoughMessages = false,
+        )
+
+        assertTrue(result.transformed == "The TESTWORD are Nice Today")
+    }
 }

@@ -53,7 +53,7 @@ class TransformedMessage private constructor(
             fromLastActedUser: Boolean,
             notEnoughMessages: Boolean,
         ): TransformedMessage {
-            val transformed = clean(genericAI.transform(bot, original, word))
+            val transformed = CasingRestorer.restore(original, clean(genericAI.transform(bot, original, word)))
             val similarityScore = Levenshtein.similarityScore(original, transformed)
             val tooDifferent = similarityScore < bot.similarityThreshold
             val containsEmoji = Phrases.containsEmoji(transformed)
