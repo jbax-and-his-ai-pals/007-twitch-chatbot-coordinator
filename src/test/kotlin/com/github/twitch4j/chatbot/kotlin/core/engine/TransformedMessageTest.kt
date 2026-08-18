@@ -111,7 +111,8 @@ class TransformedMessageTest {
     @Test
     fun `restores original casing when the model normalizes the whole response to lowercase`() {
         // Same word count as the original (five words) - "Hamptons" replaced by "TESTWORD",
-        // everything else unchanged apart from the model's stray lowercasing.
+        // everything else unchanged apart from the model's stray lowercasing. "Hamptons" was
+        // Title Case, so the substituted word is recased to Title Case too ("Testword").
         val ai = GenericAI(FakeAIClient(response = "the TESTWORD are nice today"))
         val bot = testBotDefinition(similarityThreshold = 0)
 
@@ -120,6 +121,6 @@ class TransformedMessageTest {
             fromLastActedUser = false, notEnoughMessages = false,
         )
 
-        assertTrue(result.transformed == "The TESTWORD are Nice Today")
+        assertTrue(result.transformed == "The Testword are Nice Today")
     }
 }

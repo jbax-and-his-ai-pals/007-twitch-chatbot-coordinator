@@ -85,10 +85,22 @@ class MockAIClient(private val maxLogSize: Int = 200) : AIClient {
         return "[MOCK] " + prompt.takeLast(120).trim()
     }
 
+    /**
+     * Picks a random token to swap for [word], skipping any token whose casing is
+     * [WordCasing.MIXED] (an emote-shaped token, e.g. "pegaLUL") - the same rule
+     * [com.github.twitch4j.chatbot.kotlin.core.engine.CasingRestorer] applies to the real
+     * transform - and recases [word] to match whichever token was picked (see
+     * [WordCasingMatcher]). If every token is emote-shaped, nothing is swapped.
+     */
     private fun substituteWord(original: String, word: String): String {
         val tokens = original.trim().split(" ").toMutableList()
         if (tokens.isEmpty()) return word
-        tokens[Random.nextInt(tokens.size)] = word
+
+        val candidateIndices = tokens.indices.filter { WordCasing.of(tokens[it]) != WordCasing.MIXED }
+        if (candidateIndices.isEmpty()) return original.trim()
+
+        val index = candidateIndices[Random.nextInt(candidateIndices.size)]
+        tokens[index] = WordCasingMatcher.apply(tokens[index], word) ?: word
         return tokens.joinToString(" ")
     }
 

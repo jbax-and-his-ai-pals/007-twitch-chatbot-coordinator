@@ -11,17 +11,49 @@ class CasingRestorerTest {
             transformed = "the blamptons are nice today",
         )
 
-        assertEquals("The blamptons are Nice today", result)
+        // "Hamptons" -> "blamptons" is the one substituted word - since "Hamptons" was Title
+        // Case, the replacement is recased to Title Case too, same as every other word here.
+        assertEquals("The Blamptons are Nice today", result)
     }
 
     @Test
-    fun `the one substituted word is left exactly as the model produced it`() {
+    fun `the substituted word is recased to Title Case when the original word was Title Case`() {
         val result = CasingRestorer.restore(
-            original = "the hamptons are nice",
-            transformed = "the BLAMP are nice",
+            original = "the Golden retriever",
+            transformed = "the butt retriever",
         )
 
-        assertEquals("the BLAMP are nice", result)
+        assertEquals("the Butt retriever", result)
+    }
+
+    @Test
+    fun `the substituted word is recased to ALL CAPS when the original word was ALL CAPS`() {
+        val result = CasingRestorer.restore(
+            original = "the GOLDEN retriever",
+            transformed = "the butt retriever",
+        )
+
+        assertEquals("the BUTT retriever", result)
+    }
+
+    @Test
+    fun `a plain lowercase original word leaves the model's own casing choice for the substitution alone`() {
+        val result = CasingRestorer.restore(
+            original = "the golden retriever",
+            transformed = "the BLAMP retriever",
+        )
+
+        assertEquals("the BLAMP retriever", result)
+    }
+
+    @Test
+    fun `a mixed-case original word - likely an emote - is left unreplaced entirely`() {
+        val result = CasingRestorer.restore(
+            original = "that GoLden retriever",
+            transformed = "that BLAMP retriever",
+        )
+
+        assertEquals("that GoLden retriever", result)
     }
 
     @Test
@@ -51,9 +83,10 @@ class CasingRestorerTest {
             transformed = "hello world!",
         )
 
-        // "Hello," (with comma) vs "hello" (no comma) differ beyond case, so it's left as-is;
-        // "World!" vs "world!" differ only in case, so it's restored.
-        assertEquals("hello World!", result)
+        // "Hello," (comma, ignored for casing purposes) is Title Case, so "hello" - a real
+        // difference from "Hello," - is recased to Title Case; "World!" vs "world!" differ
+        // only in case, so it's restored to the original exactly.
+        assertEquals("Hello World!", result)
     }
 
     @Test

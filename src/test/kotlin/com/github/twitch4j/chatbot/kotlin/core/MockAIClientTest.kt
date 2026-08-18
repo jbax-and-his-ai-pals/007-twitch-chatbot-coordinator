@@ -151,6 +151,47 @@ class MockAIClientTest {
         assertEquals("a canned transform result", response)
     }
 
+    // ---- Transform-shaped prompts: the swapped-in word matches the original word's casing -
+
+    @Test
+    fun `swapping a Title Case word recases the configured word to Title Case too`() {
+        val client = MockAIClient()
+        // Every word is Title Case, so whichever one the random pick lands on, the result is
+        // deterministic - a Title Case "Butt" somewhere in the response.
+        val response = client.generateContent(transformPrompt("The Golden Retriever Ran Fast", word = "BUTT"))
+
+        assertTrue(response.contains("Butt"), "expected Title Case, was: $response")
+    }
+
+    @Test
+    fun `swapping an ALL CAPS word recases the configured word to ALL CAPS too`() {
+        val client = MockAIClient()
+        val response = client.generateContent(transformPrompt("THE GOLDEN RETRIEVER RAN FAST", word = "BUTT"))
+
+        assertTrue(response.contains("BUTT"), "expected ALL CAPS, was: $response")
+    }
+
+    @Test
+    fun `an emote-shaped word in the original is never chosen as the swap target`() {
+        val client = MockAIClient()
+        // Only "pegaLUL" is emote-shaped (mixed case) - every other word is a valid,
+        // deterministic swap target, so this never flakes regardless of the random pick.
+        val original = "look at this pegaLUL moment right now"
+
+        val response = client.generateContent(transformPrompt(original, word = "BUTT"))
+
+        assertTrue(response.contains("pegaLUL"), "expected the emote-shaped word to survive untouched, was: $response")
+    }
+
+    @Test
+    fun `when every word is emote-shaped, nothing is swapped and the original is returned unchanged`() {
+        val client = MockAIClient()
+
+        val response = client.generateContent(transformPrompt("pegaLUL pepeLaugh docHype", word = "BUTT"))
+
+        assertEquals("pegaLUL pepeLaugh docHype", response)
+    }
+
     // ---- Hello-back-shaped prompts: pull the username from the explicit instruction -----
 
     /** Mirrors what GenericAI.helloBack actually builds: preamble, a mood's filled-in greeting, then the trailing name instruction. */
