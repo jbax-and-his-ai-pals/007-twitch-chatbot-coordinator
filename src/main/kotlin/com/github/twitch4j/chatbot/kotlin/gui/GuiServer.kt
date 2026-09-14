@@ -74,7 +74,11 @@ fun Application.guiModule(admin: AdminController) {
             get("/cooldowns/{botKey}") {
                 val botKey = call.parameters["botKey"]!!
                 val snapshot = admin.cooldownSnapshot(botKey)
-                if (snapshot == null) call.respond(HttpStatusCode.NotFound) else call.respond(snapshot.toDto())
+                if (snapshot == null) {
+                    call.respond(HttpStatusCode.NotFound)
+                } else {
+                    call.respond(snapshot.toDto(mainlinePooledWith = admin.mainlinePoolPeers(botKey)))
+                }
             }
 
             post("/cooldowns/{botKey}/{type}/expire") {
@@ -113,6 +117,12 @@ fun Application.guiModule(admin: AdminController) {
             post("/send") {
                 val body = call.receive<SendRequestDto>()
                 val ok = admin.sendAsBot(body.botKey, body.message)
+                call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.NotFound)
+            }
+
+            post("/test-message") {
+                val body = call.receive<TestMessageDto>()
+                val ok = admin.sendTestMessage(body.botKey, body.message, body.channel)
                 call.respond(if (ok) HttpStatusCode.OK else HttpStatusCode.NotFound)
             }
 

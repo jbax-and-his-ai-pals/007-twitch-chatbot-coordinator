@@ -4,6 +4,7 @@ import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
+import com.github.twitch4j.chatbot.kotlin.core.MainlinePool
 import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
@@ -16,6 +17,8 @@ private class StubPersonality(override val name: String) : Personality {
     override val client: ITwitchClient get() = throw UnsupportedOperationException("not needed for Scheduler tests")
     override val channel = "test"
     override val definition = testBotDefinition(key = name)
+    override val mainlinePool: MainlinePool? = null
+    override var minimumMessagesBetween: Int = 0
     override fun determineIntent(event: ChannelMessageEvent, processed: ProcessedEvent) = PersonalityIntent.None
     override fun actMainline(event: ChannelMessageEvent) = Unit
     override fun cooldownSnapshot() = throw UnsupportedOperationException("not needed for Scheduler tests")

@@ -15,6 +15,14 @@ data class Configuration(
     val channels: List<String> = listOf(),
     val defaults: DefaultsConfig = DefaultsConfig(),
     val bots: Map<String, RawBotConfig> = mapOf(),
+    /**
+     * Bot keys (from [bots]) that share one ambient mainline-transform timer instead of
+     * each running its own - see [MainlinePool]. A bot key not listed here (or an empty/
+     * single-entry list) keeps its own independent timer, unaffected. The pool's timer
+     * tuning (interval bounds, start delay, minimum messages between) is seeded from the
+     * FIRST bot key listed here.
+     */
+    val mainlinePool: List<String> = listOf(),
     /** Port the embedded GUI control panel listens on (http://localhost:PORT). */
     val guiPort: Int = 8080,
 ) {

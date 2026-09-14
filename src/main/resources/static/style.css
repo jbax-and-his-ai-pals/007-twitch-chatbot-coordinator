@@ -130,6 +130,15 @@ body {
 }
 .simulate-form input#simulateUser { width: 100px; flex: 1 1 100px; }
 .simulate-form input#simulateMessage { flex: 3 1 140px; }
+.simulate-form input#testMessageInput { flex: 3 1 140px; }
+.simulate-form select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 12px;
+}
 .simulate-form button {
   background: var(--purple);
   border: none;
@@ -141,6 +150,22 @@ body {
   font-size: 12px;
 }
 .simulate-form button:hover { opacity: 0.9; }
+
+/* Two explicit destinations rather than one submit action - each button targets a
+   different channel, so both stay visible and clickable side by side. */
+.test-message-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.test-message-buttons button {
+  flex: 1;
+  background: var(--accent);
+  border: none;
+  color: #10121a;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.test-message-buttons button:hover { opacity: 0.9; }
 
 .simulate-presets {
   display: flex;
@@ -489,6 +514,17 @@ body {
 }
 .cooldown-row-mainline .cooldown-bar-track { height: 14px; border-radius: 6px; }
 .cooldown-row-mainline .cooldown-val { width: 54px; font-size: 13px; font-weight: 700; color: var(--text); }
+/* Marks a mainline bar as one shared timer across multiple bots (see MainlinePool) - a
+   deliberate visual break from the "one bar = one bot's own timer" default. */
+.cooldown-pool-badge {
+  font-size: 9px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90px;
+  cursor: help;
+}
 .cooldown-expire {
   background: none;
   border: 1px solid var(--border);
@@ -628,6 +664,12 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-dim);
+}
+/* This field actually edits a MainlinePool shared with other bots, not just this one - see AdminController.mainlinePoolPeers. */
+.config-pooled-note {
+  margin: -4px 0 6px;
+  font-size: 11px;
+  color: var(--accent);
 }
 
 /* List-shaped blocks (excluded users, callout/forbidden words, overrides, hello triggers,

@@ -11,6 +11,7 @@ import com.github.twitch4j.chatbot.kotlin.core.ActivityLog
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.Configuration
+import com.github.twitch4j.chatbot.kotlin.core.MainlinePool
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MessageDispatcher
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
@@ -66,6 +67,17 @@ class Controller(private val configuration: Configuration) {
     private val mockAiClient = MockAIClient()
     private val commonConfig = CommonConfig.from(configuration.defaults)
 
+    // Bots listed under config.yaml's `mainline_pool` rotate through one shared ambient
+    // timer instead of each running its own - see MainlinePool's doc comment. Seeded from
+    // the FIRST listed bot's own resolved mainline cooldown config (e.g. toikeybot's).
+    // Fewer than two entries means no pooling: every bot keeps its own independent timer.
+    private val sharedMainlinePool: MainlinePool? = configuration.mainlinePool.takeIf { it.size >= 2 }?.let { poolKeys ->
+        val seedKey = poolKeys.first()
+        val seedDefinition = definitions.firstOrNull { it.key == seedKey }
+            ?: error("mainline_pool's first entry '$seedKey' isn't a configured bot")
+        MainlinePool(label = "POOL", mainlineConfig = seedDefinition.cooldowns.mainline)
+    }
+
     private val personalities: List<Personality> = definitions.map { def ->
         ConfiguredPersonality(
             bot = def,
@@ -76,6 +88,7 @@ class Controller(private val configuration: Configuration) {
             ),
             activityBus = activityBus,
             commonConfig = commonConfig,
+            mainlinePool = if (def.key in configuration.mainlinePool) sharedMainlinePool else null,
         )
     }
 

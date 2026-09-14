@@ -437,16 +437,30 @@ document.getElementById("simulateForm").addEventListener("submit", async (e) => 
   messageInput.value = "";
 });
 
+document.querySelector(".test-message-buttons").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-channel]");
+  if (!btn) return;
+  const botKey = testMessageBotSelect.value;
+  const messageInput = document.getElementById("testMessageInput");
+  const message = messageInput.value.trim();
+  if (!botKey || !message) return;
+  const channel = btn.dataset.channel;
+  await api("/test-message", { method: "POST", body: JSON.stringify({ botKey, message, channel }) });
+  messageInput.value = "";
+});
+
 // ==================================================================================
 // Quick-fire presets and random batch simulate
 // ==================================================================================
 
 const presetBotSelect = document.getElementById("presetBotSelect");
+const testMessageBotSelect = document.getElementById("testMessageBotSelect");
 
-function populatePresetBotSelect() {
-  const previous = presetBotSelect.value;
-  presetBotSelect.innerHTML = bots.map((b) => `<option value="${escapeHtml(b.key)}">${escapeHtml(b.key)}</option>`).join("");
-  if (bots.some((b) => b.key === previous)) presetBotSelect.value = previous;
+/** Repopulates a bot-key <select> (preset picker, test-message picker, ...) from the current bot list, preserving the selection if it still exists. */
+function populateBotSelect(select) {
+  const previous = select.value;
+  select.innerHTML = bots.map((b) => `<option value="${escapeHtml(b.key)}">${escapeHtml(b.key)}</option>`).join("");
+  if (bots.some((b) => b.key === previous)) select.value = previous;
 }
 
 function fireSimulate(user, message) {
@@ -559,18 +573,27 @@ function connectWebSocket() {
 // Bot cards: cooldown bars, send-as, recent messages
 // ==================================================================================
 
-/** [displayName] is the bot's own transform word (e.g. "BLAMP") for the mainline row, the type name for the other four. */
-function cooldownBarHtml(botKey, type, status, displayName) {
+/**
+ * [displayName] is the bot's own transform word (e.g. "BLAMP") for the mainline row, the
+ * type name for the other four. [pooledWith] (mainline row only) lists other bot keys
+ * sharing this exact timer - a non-empty list renders a small badge so it's visually clear
+ * this bar moving isn't a coincidence, it's the same underlying timer as those other bots'.
+ */
+function cooldownBarHtml(botKey, type, status, displayName, pooledWith = []) {
   const seconds = (status.remainingMs / 1000).toFixed(1);
   const progressPct = status.configuredMs > 0
     ? Math.round(((status.configuredMs - status.remainingMs) / status.configuredMs) * 100)
     : 100;
   const pct = status.ready ? 100 : Math.min(100, Math.max(0, progressPct));
   const isMainline = type === "mainline";
+  const poolBadge = pooledWith.length
+    ? `<span class="cooldown-pool-badge" title="Shared timer with ${escapeHtml(pooledWith.join(", "))}">&#128279; ${escapeHtml(pooledWith.join(", "))}</span>`
+    : "";
 
   return `
     <div class="cooldown-row${isMainline ? " cooldown-row-mainline" : ""}" data-bot="${botKey}" data-type="${type}">
       <span class="cooldown-name">${escapeHtml(displayName)}</span>
+      ${poolBadge}
       <div class="cooldown-bar-track">
         <div class="cooldown-bar-fill cooldown-bar-fill-${type} ${status.ready ? "ready" : ""}" style="width:${pct}%"></div>
       </div>
@@ -664,6 +687,11 @@ function configGroupHtml(title, colorClass, innerHtml) {
   `;
 }
 
+/** A small "shared with X, Y" note for a config field that actually edits a MainlinePool shared across bots, not just this one. */
+function pooledNoteHtml(pooledWith) {
+  return pooledWith.length ? `<div class="config-pooled-note">&#128279; shared with ${escapeHtml(pooledWith.join(", "))}</div>` : "";
+}
+
 function configSectionHtml(botKey, config, cooldowns) {
   const identity = `
     ${chipListBlockHtml("bot", botKey, "Trigger keywords", "trigger-keywords", "keyword", config.triggerKeywords)}
@@ -710,6 +738,7 @@ function configSectionHtml(botKey, config, cooldowns) {
 
     <div class="config-block">
       <h4>Minimum messages between mainline actions</h4>
+      ${pooledNoteHtml(cooldowns.mainlinePooledWith)}
       <div class="config-numfields">
         <input type="number" class="cfg-num" data-autosave="min-messages" data-bot="${escapeHtml(botKey)}" data-saved="${config.minimumMessagesBetween}" value="${config.minimumMessagesBetween}" />
       </div>
@@ -729,6 +758,7 @@ function configSectionHtml(botKey, config, cooldowns) {
 
     <div class="config-block">
       <h4>Mainline interval bounds (ms)</h4>
+      ${pooledNoteHtml(cooldowns.mainlinePooledWith)}
       <div class="config-numfields">
         <label>min <input type="number" class="cfg-num" data-field="mainline-min" data-autosave="mainline-interval" data-bot="${escapeHtml(botKey)}" data-saved="${cooldowns.mainlineIntervalMinimumMs}" value="${cooldowns.mainlineIntervalMinimumMs}" /></label>
         <label>max <input type="number" class="cfg-num" data-field="mainline-max" data-autosave="mainline-interval" data-bot="${escapeHtml(botKey)}" data-saved="${cooldowns.mainlineIntervalMaximumMs}" value="${cooldowns.mainlineIntervalMaximumMs}" /></label>
@@ -1197,7 +1227,7 @@ async function refreshCooldowns() {
       const snapshot = await api(`/cooldowns/${encodeURIComponent(bot.key)}`);
       const container = card.querySelector(".cooldowns");
       container.innerHTML = COOLDOWN_TYPES
-        .map((t) => cooldownBarHtml(bot.key, t, snapshot[t], t === "mainline" ? snapshot.label : t))
+        .map((t) => cooldownBarHtml(bot.key, t, snapshot[t], t === "mainline" ? snapshot.label : t, t === "mainline" ? snapshot.mainlinePooledWith : []))
         .join("");
       container.querySelectorAll(".cooldown-expire").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -1229,7 +1259,8 @@ async function loadBots() {
   botCardsEl.innerHTML = "";
   bots.forEach((bot) => botCardsEl.appendChild(renderBotCard(bot)));
   bots.forEach((bot) => renderRecentMessages(bot.key));
-  populatePresetBotSelect();
+  populateBotSelect(presetBotSelect);
+  populateBotSelect(testMessageBotSelect);
   await refreshCooldowns();
 }
 

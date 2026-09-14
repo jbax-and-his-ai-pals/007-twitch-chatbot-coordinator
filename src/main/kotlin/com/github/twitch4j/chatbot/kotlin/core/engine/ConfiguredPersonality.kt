@@ -12,6 +12,7 @@ import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
 import com.github.twitch4j.chatbot.kotlin.core.Cooldowns
 import com.github.twitch4j.chatbot.kotlin.core.FeatureConfig
+import com.github.twitch4j.chatbot.kotlin.core.MainlinePool
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
@@ -41,6 +42,7 @@ class ConfiguredPersonality(
     private val genericAI: GenericAI = GenericAI(),
     private val activityBus: ActivityBus = ActivityBus(),
     private val commonConfig: CommonConfig = CommonConfig(),
+    override val mainlinePool: MainlinePool? = null,
 ) : Personality {
     override val name = bot.key
     override val definition: BotDefinition get() = bot
@@ -66,12 +68,26 @@ class ConfiguredPersonality(
     private var lastUser = ""
     private var lastMessage = ""
 
+    override var minimumMessagesBetween: Int
+        get() = mainlinePool?.minimumMessagesBetween ?: bot.cooldowns.mainline.minimumMessagesBetween
+        set(value) {
+            if (mainlinePool != null) mainlinePool.minimumMessagesBetween = value else bot.cooldowns.mainline.minimumMessagesBetween = value
+        }
+
     private val retryFeature = bot.features.filterIsInstance<FeatureConfig.Retry>().firstOrNull()
     private val easterEggFeatures = bot.features.filterIsInstance<FeatureConfig.EasterEgg>()
 
     override fun determineIntent(event: ChannelMessageEvent, processed: ProcessedEvent): PersonalityIntent {
-        cooldowns.printCooldownMessages()
-        messagesSinceLastMainline++
+        // The mainline line comes from the shared pool when pooled - printing cooldowns.
+        // printMainlineCooldownMessage() here would show this bot's own, never-reset timer.
+        Messaging.info("COOLDOWNS: ", addNewLine = false)
+        if (mainlinePool != null) mainlinePool.printCooldownMessage() else cooldowns.printMainlineCooldownMessage()
+        cooldowns.printWisdomCooldownMessage()
+        cooldowns.printRequestCooldownMessage()
+        cooldowns.printRetryCooldownMessage()
+        cooldowns.printCalloutCooldownMessage()
+
+        if (mainlinePool != null) mainlinePool.noteMessage(processed) else messagesSinceLastMainline++
 
         val eligibility = processed.eligibilityFor(bot, commonConfig)
         val message = event.message.lowercase()
@@ -118,43 +134,65 @@ class ConfiguredPersonality(
                 PersonalityIntent.Secondary { doWisdom(event) }
             retryPrefix != null && !cooldowns.isRetryInCooldown() ->
                 PersonalityIntent.Secondary { doRetry(event) }
-            cooldowns.canActMainline(event.user.name, lastUser, messagesSinceLastMainline, bot.cooldowns.mainline.minimumMessagesBetween) ->
-                PersonalityIntent.Mainline
+            canActMainline(event.user.name) -> PersonalityIntent.Mainline
             else -> PersonalityIntent.None
         }
     }
 
+    /** Checks the shared pool's timer when [mainlinePool] is set, otherwise this bot's own - see [MainlinePool]. */
+    private fun canActMainline(userName: String): Boolean =
+        mainlinePool?.canAct(userName)
+            ?: cooldowns.canActMainline(userName, lastUser, messagesSinceLastMainline, bot.cooldowns.mainline.minimumMessagesBetween)
+
     override fun actMainline(event: ChannelMessageEvent) {
         val word = pickTransformWord()
+        val messagesSince = mainlinePool?.messagesSinceLastMainline ?: messagesSinceLastMainline
+        val actingLastUser = mainlinePool?.lastUser ?: lastUser
         val transformed = TransformedMessage.fromString(
             bot = bot,
             genericAI = genericAI,
             original = event.message,
             word = word,
-            fromLastActedUser = lastUser == event.user.name,
-            notEnoughMessages = messagesSinceLastMainline < bot.cooldowns.mainline.minimumMessagesBetween,
+            fromLastActedUser = actingLastUser == event.user.name,
+            notEnoughMessages = messagesSince < minimumMessagesBetween,
         )
 
-        transformed.printStatus(bot, event, messagesSinceLastMainline)
+        transformed.printStatus(bot, event, messagesSince)
 
         if (transformed.isValid) {
-            cooldowns.resetMainlineCooldown()
-            messagesSinceLastMainline = 0
+            if (mainlinePool != null) {
+                mainlinePool.recordAct(event.user.name)
+            } else {
+                cooldowns.resetMainlineCooldown()
+                messagesSinceLastMainline = 0
+                lastUser = event.user.name
+            }
             lastMessage = transformed.transformed
-            lastUser = event.user.name
             send(channel, transformed.transformed, source = event)
         } else {
             Messaging.info("No action taken.")
         }
     }
 
-    override fun cooldownSnapshot(): CooldownSnapshot = cooldowns.snapshot()
+    override fun cooldownSnapshot(): CooldownSnapshot {
+        val snapshot = cooldowns.snapshot()
+        val pool = mainlinePool ?: return snapshot
+        return snapshot.copy(
+            mainline = pool.mainlineStatus(),
+            mainlineIntervalMinimumMs = pool.intervalMinimumMs,
+            mainlineIntervalMaximumMs = pool.intervalMaximumMs,
+        )
+    }
 
-    override fun adminCooldown(type: CooldownType, action: CooldownAdminAction) = cooldowns.admin(type, action)
+    override fun adminCooldown(type: CooldownType, action: CooldownAdminAction) {
+        if (type == CooldownType.MAINLINE && mainlinePool != null) mainlinePool.admin(action) else cooldowns.admin(type, action)
+    }
 
     override fun setCooldownConfig(type: CooldownType, ms: Long) = cooldowns.setIntervalMs(type, ms)
 
-    override fun setMainlineIntervalBounds(minMs: Long, maxMs: Long) = cooldowns.setMainlineIntervalBounds(minMs, maxMs)
+    override fun setMainlineIntervalBounds(minMs: Long, maxMs: Long) {
+        if (mainlinePool != null) mainlinePool.setIntervalBounds(minMs, maxMs) else cooldowns.setMainlineIntervalBounds(minMs, maxMs)
+    }
 
     private fun send(targetChannel: String, message: String, manual: Boolean = false, source: ChannelMessageEvent? = null) {
         client.chat.sendMessage(targetChannel, message)

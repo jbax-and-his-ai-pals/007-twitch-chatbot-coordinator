@@ -9,6 +9,8 @@ import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
 import com.github.twitch4j.chatbot.kotlin.core.HelloTrigger
+import com.github.twitch4j.chatbot.kotlin.core.MainlineCooldownConfig
+import com.github.twitch4j.chatbot.kotlin.core.MainlinePool
 import com.github.twitch4j.chatbot.kotlin.core.MessageLengthConfig
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
@@ -210,6 +212,41 @@ class AdminControllerTest {
     @Test
     fun `sendAsBot returns false and sends nothing for an unknown bot key`() {
         val ok = admin.sendAsBot("does-not-exist", "hi")
+
+        assertFalse(ok)
+        verify(exactly = 0) { chatA.sendMessage(any(), any()) }
+        verify(exactly = 0) { chatB.sendMessage(any(), any()) }
+    }
+
+    @Test
+    fun `sendTestMessage sends through the bot's own client but to the explicit channel passed in, not its real one`() {
+        val ok = admin.sendTestMessage("blampbot", "poking blampbot's connection", "jerbtrundles")
+
+        assertTrue(ok)
+        // "testchannel" is blampbot's real configured channel in this fixture - proves the
+        // test message did NOT go there, only to the explicitly requested one.
+        verify(exactly = 0) { chatA.sendMessage("testchannel", any()) }
+        verify { chatA.sendMessage("jerbtrundles", "poking blampbot's connection") }
+        verify(exactly = 0) { chatB.sendMessage(any(), any()) }
+
+        val event = admin.recentActivity().last() as ActivityEvent.Outgoing
+        assertEquals("blampbot", event.botKey)
+        assertEquals("jerbtrundles", event.channel)
+        assertTrue(event.manual)
+    }
+
+    @Test
+    fun `sendTestMessage can target a second channel independently, like the real audience-facing one`() {
+        val ok = admin.sendTestMessage("blampbot", "poking the live channel specifically", "thecheeseball81")
+
+        assertTrue(ok)
+        verify { chatA.sendMessage("thecheeseball81", "poking the live channel specifically") }
+        verify(exactly = 0) { chatA.sendMessage("jerbtrundles", any()) }
+    }
+
+    @Test
+    fun `sendTestMessage returns false and sends nothing for an unknown bot key`() {
+        val ok = admin.sendTestMessage("does-not-exist", "hi", "jerbtrundles")
 
         assertFalse(ok)
         verify(exactly = 0) { chatA.sendMessage(any(), any()) }
@@ -566,6 +603,69 @@ class AdminControllerTest {
         assertEquals(5, admin.botConfig("blampbot")!!.minimumMessagesBetween)
 
         assertFalse(admin.setMinimumMessagesBetween("blampbot", -1))
+    }
+
+    /** A fresh two-pooled-bot-plus-one-unpooled-bot AdminController, independent of the class-level [admin] fixture. */
+    private fun poolFixture(): Triple<AdminController, String, String> {
+        val pool = MainlinePool(
+            label = "POOL",
+            mainlineConfig = MainlineCooldownConfig(
+                startDelayMs = 100_000L,
+                startInstantly = false,
+                intervalMinimumMs = 1000,
+                intervalMaximumMs = 2000,
+                minimumMessagesBetween = 0,
+            ),
+        )
+        val clientPooledA: ITwitchClient = mockk(relaxed = true)
+        val clientPooledB: ITwitchClient = mockk(relaxed = true)
+        val clientUnpooled: ITwitchClient = mockk(relaxed = true)
+        val pooledA = ConfiguredPersonality(
+            bot = testBotDefinition(key = "toikeybot"), client = clientPooledA, channel = "testchannel", mainlinePool = pool,
+        )
+        val pooledB = ConfiguredPersonality(
+            bot = testBotDefinition(key = "blampbot2"), client = clientPooledB, channel = "testchannel", mainlinePool = pool,
+        )
+        val unpooled = ConfiguredPersonality(bot = testBotDefinition(key = "buttsbot2"), client = clientUnpooled, channel = "testchannel")
+        val poolAdmin = AdminController(
+            personalities = listOf(pooledA, pooledB, unpooled),
+            clients = mapOf("toikeybot" to clientPooledA, "blampbot2" to clientPooledB, "buttsbot2" to clientUnpooled),
+            activityBus = ActivityBus(),
+            mockModeState = MockModeState(),
+            mockAiClient = MockAIClient(),
+            commonConfig = CommonConfig(),
+        )
+        return Triple(poolAdmin, "toikeybot", "blampbot2")
+    }
+
+    @Test
+    fun `mainlinePoolPeers reports the other bot sharing a MainlinePool, empty for an unpooled bot`() {
+        val (poolAdmin, keyA, keyB) = poolFixture()
+
+        assertEquals(listOf(keyB), poolAdmin.mainlinePoolPeers(keyA))
+        assertEquals(listOf(keyA), poolAdmin.mainlinePoolPeers(keyB))
+        assertTrue(poolAdmin.mainlinePoolPeers("buttsbot2").isEmpty())
+    }
+
+    @Test
+    fun `setMinimumMessagesBetween on a pooled bot updates the shared pool, visible from its peer too`() {
+        val (poolAdmin, keyA, keyB) = poolFixture()
+
+        assertTrue(poolAdmin.setMinimumMessagesBetween(keyA, 9))
+
+        assertEquals(9, poolAdmin.botConfig(keyB)!!.minimumMessagesBetween)
+    }
+
+    @Test
+    fun `fastForwardAllCooldowns advances a shared pool's MAINLINE timer exactly once, not once per member`() {
+        val (poolAdmin, keyA, _) = poolFixture()
+        // Seeded via startDelayMs=100_000/startInstantly=false in poolFixture, so ~100s remain up front.
+
+        assertTrue(poolAdmin.fastForwardAllCooldowns(30_000L))
+
+        val remaining = poolAdmin.cooldownSnapshot(keyA)!!.mainline.remainingMs
+        // Applied once: ~70s left. A double-apply bug (once per pool member) would land near 40s instead.
+        assertTrue(remaining in 65_000..70_500, "expected ~70s remaining after a single 30s advance, got ${remaining}ms")
     }
 
     @Test

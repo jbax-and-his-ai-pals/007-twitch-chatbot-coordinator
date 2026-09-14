@@ -166,6 +166,16 @@ class AdminController(
 
     fun cooldownSnapshot(botKey: String): CooldownSnapshot? = personalityByKey[botKey]?.cooldownSnapshot()
 
+    /**
+     * Other bot keys sharing [botKey]'s [com.github.twitch4j.chatbot.kotlin.core.MainlinePool]
+     * (empty if [botKey] isn't pooled) - lets the GUI show that two bots' mainline timers
+     * are the same underlying timer, not a coincidence.
+     */
+    fun mainlinePoolPeers(botKey: String): List<String> {
+        val pool = personalityByKey[botKey]?.mainlinePool ?: return emptyList()
+        return personalities.filter { it.name != botKey && it.mainlinePool === pool }.map { it.name }
+    }
+
     /** Returns false if [botKey] doesn't match any configured bot. */
     fun cooldownAdmin(botKey: String, type: CooldownType, action: CooldownAdminAction): Boolean {
         val personality = personalityByKey[botKey] ?: return false
@@ -173,20 +183,34 @@ class AdminController(
         return true
     }
 
+    /**
+     * Applies [action] to [type] on every bot exactly once - for a bot sharing a
+     * [com.github.twitch4j.chatbot.kotlin.core.MainlinePool], MAINLINE is applied only the
+     * first time that pool is encountered, since every pool member's [Personality.adminCooldown]
+     * for MAINLINE reaches the same shared timer; applying it once per pool member would
+     * over-apply (e.g. double-advance a fast-forward).
+     */
+    private fun forEachCooldown(action: (Personality, CooldownType) -> Unit) {
+        val handledPools = mutableSetOf<Any>()
+        personalities.forEach { personality ->
+            CooldownType.entries.forEach { type ->
+                val pool = personality.mainlinePool
+                val alreadyHandled = type == CooldownType.MAINLINE && pool != null && !handledPools.add(pool)
+                if (!alreadyHandled) action(personality, type)
+            }
+        }
+    }
+
     /** Expires every cooldown timer on every bot at once - a global "everyone's ready now" button. */
     fun expireAllCooldowns() {
-        personalities.forEach { personality ->
-            CooldownType.entries.forEach { type -> personality.adminCooldown(type, CooldownAdminAction.Expire) }
-        }
+        forEachCooldown { personality, type -> personality.adminCooldown(type, CooldownAdminAction.Expire) }
         Messaging.info("ALL cooldowns expired for every bot")
     }
 
     /** Shifts every cooldown timer on every bot back by [ms] at once, e.g. to test "almost ready" states without fully resetting. */
     fun fastForwardAllCooldowns(ms: Long): Boolean {
         if (ms <= 0) return false
-        personalities.forEach { personality ->
-            CooldownType.entries.forEach { type -> personality.adminCooldown(type, CooldownAdminAction.AdvanceBy(ms)) }
-        }
+        forEachCooldown { personality, type -> personality.adminCooldown(type, CooldownAdminAction.AdvanceBy(ms)) }
         Messaging.info("ALL cooldowns fast-forwarded by ${ms}ms for every bot")
         return true
     }
@@ -197,6 +221,24 @@ class AdminController(
         val client = clients[botKey] ?: return false
         client.chat.sendMessage(personality.channel, message)
         activityBus.publish(ActivityEvent.Outgoing(botKey = botKey, channel = personality.channel, message = message, manual = true))
+        return true
+    }
+
+    /**
+     * Sends [message] as [botKey] straight into [channel], bypassing personality/trigger
+     * logic exactly like [sendAsBot] - the only difference is that the destination is
+     * explicit rather than always the bot's own configured channel. Lets a bot's connection
+     * be poked against a *specific* channel in isolation - e.g. confirming it can post to a
+     * private test channel at all, then separately confirming it can post to the real,
+     * audience-facing one too (a channel-specific restriction - not modded, follower-only
+     * mode, etc. - can make one work and not the other even with identical credentials).
+     * Returns false if [botKey] is unknown.
+     */
+    fun sendTestMessage(botKey: String, message: String, channel: String): Boolean {
+        if (botKey !in personalityByKey) return false
+        val client = clients[botKey] ?: return false
+        client.chat.sendMessage(channel, message)
+        activityBus.publish(ActivityEvent.Outgoing(botKey = botKey, channel = channel, message = message, manual = true))
         return true
     }
 
@@ -293,7 +335,7 @@ class AdminController(
             similarityThreshold = bot.similarityThreshold,
             moods = bot.moods.map { it.name },
             activeMood = bot.activeMood.name,
-            minimumMessagesBetween = bot.cooldowns.mainline.minimumMessagesBetween,
+            minimumMessagesBetween = personality.minimumMessagesBetween,
             helloTriggers = bot.helloTriggers.map(::toHelloTriggerDetail).sortedBy { it.value },
             transformWords = bot.transform.words.sortedBy { it.word }.map { TransformWordDetail(it.word, it.weight) },
             selfQuoteMarker = bot.transform.selfQuoteMarker,
@@ -417,11 +459,12 @@ class AdminController(
         true
     }
 
-    fun setMinimumMessagesBetween(botKey: String, count: Int): Boolean = editBot(botKey) { bot ->
-        if (count < 0) return@editBot false
-        bot.cooldowns.mainline.minimumMessagesBetween = count
+    fun setMinimumMessagesBetween(botKey: String, count: Int): Boolean {
+        if (count < 0) return false
+        val personality = personalityByKey[botKey] ?: return false
+        personality.minimumMessagesBetween = count
         logConfigChange(botKey, "minimum messages between set: $count")
-        true
+        return true
     }
 
     /** [type] must not be MAINLINE - that's a random range, set via [setMainlineIntervalBounds]. */
@@ -612,7 +655,7 @@ class AdminController(
             bot.prompts.transform = persisted.prompts.transform
             bot.prompts.wisdom = persisted.prompts.wisdom
             bot.prompts.request = persisted.prompts.request
-            bot.cooldowns.mainline.minimumMessagesBetween = persisted.minimumMessagesBetween
+            personality.minimumMessagesBetween = persisted.minimumMessagesBetween
             personality.setCooldownConfig(CooldownType.WISDOM, persisted.wisdomCooldownMs)
             personality.setCooldownConfig(CooldownType.CALLOUT, persisted.calloutCooldownMs)
             personality.setCooldownConfig(CooldownType.RETRY, persisted.retryCooldownMs)

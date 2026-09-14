@@ -18,6 +18,8 @@ private class FakePersonality(
     override val client: ITwitchClient get() = throw UnsupportedOperationException("not needed")
     override val channel = "test"
     override val definition = testBotDefinition(key = name)
+    override val mainlinePool: MainlinePool? = null
+    override var minimumMessagesBetween: Int = 0
     var mainlineActed = false
         private set
 

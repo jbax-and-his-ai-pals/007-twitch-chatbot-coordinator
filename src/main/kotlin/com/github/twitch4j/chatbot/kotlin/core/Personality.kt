@@ -21,6 +21,12 @@ interface Personality {
     val channel: String
     val definition: BotDefinition
 
+    /** Non-null when this bot's mainline transform is gated by a [MainlinePool] shared with other bots, instead of its own independent timer. */
+    val mainlinePool: MainlinePool?
+
+    /** How many other messages must pass before this bot's mainline transform can fire again - shared across the pool when [mainlinePool] is set. */
+    var minimumMessagesBetween: Int
+
     /** Decide what (if anything) this personality wants to do with the message. */
     fun determineIntent(event: ChannelMessageEvent, processed: ProcessedEvent): PersonalityIntent
 

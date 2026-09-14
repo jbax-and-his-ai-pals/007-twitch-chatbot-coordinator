@@ -57,9 +57,11 @@ data class CooldownSnapshotDto(
     val callout: CooldownStatusDto,
     val retry: CooldownStatusDto,
     val request: CooldownStatusDto,
+    /** Other bot keys sharing this bot's mainline timer - see [com.github.twitch4j.chatbot.kotlin.controller.AdminController.mainlinePoolPeers]. */
+    val mainlinePooledWith: List<String> = listOf(),
 )
 
-fun CooldownSnapshot.toDto() = CooldownSnapshotDto(
+fun CooldownSnapshot.toDto(mainlinePooledWith: List<String> = listOf()) = CooldownSnapshotDto(
     label = label,
     mainline = mainline.toDto(),
     mainlineIntervalMinimumMs = mainlineIntervalMinimumMs,
@@ -68,6 +70,7 @@ fun CooldownSnapshot.toDto() = CooldownSnapshotDto(
     callout = callout.toDto(),
     retry = retry.toDto(),
     request = request.toDto(),
+    mainlinePooledWith = mainlinePooledWith,
 )
 
 @Serializable
@@ -150,6 +153,9 @@ fun PersistedActivityEvent.toDto() = ActivityEventDto(
 
 @Serializable
 data class SendRequestDto(val botKey: String, val message: String)
+
+@Serializable
+data class TestMessageDto(val botKey: String, val message: String, val channel: String)
 
 @Serializable
 data class MockModeDto(val enabled: Boolean)

@@ -131,6 +131,21 @@
           </div>
         </div>
       </div>
+
+      <div class="overrides-card collapsed" id="testMessageCard">
+        <h3 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> Test message</h3>
+        <div class="card-body">
+          <p class="hint">Sends as the chosen bot straight into whichever channel you pick, bypassing all trigger logic - just like a card's own "Send as", but to an explicit channel instead of that bot's configured one. Try jerbtrundles first to confirm the bot's Twitch connection works at all, then thecheeseball81 to check that specific channel too - a channel-side restriction (not modded, follower-only mode, etc.) can block one and not the other even with identical credentials.</p>
+          <div id="testMessageForm" class="simulate-form">
+            <select id="testMessageBotSelect"></select>
+            <input id="testMessageInput" placeholder="message" required />
+          </div>
+          <div class="test-message-buttons">
+            <button type="button" id="testMessageJerbBtn" data-channel="jerbtrundles">Send to jerbtrundles</button>
+            <button type="button" id="testMessageCheeseBtn" data-channel="thecheeseball81">Send to thecheeseball81</button>
+          </div>
+        </div>
+      </div>
     </aside>
   </main>
 
