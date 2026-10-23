@@ -17,6 +17,7 @@ import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.MoodConfig
 import com.github.twitch4j.chatbot.kotlin.core.PersistedBotState
+import com.github.twitch4j.chatbot.kotlin.core.PersistedPrompts
 import com.github.twitch4j.chatbot.kotlin.core.PersistedState
 import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
@@ -1152,5 +1153,201 @@ class AdminControllerTest {
         val (freshAdmin, _) = adminWithPersistence(StatePersistence(java.io.File(dir, "state.json")))
 
         freshAdmin.applyPersistedState(state)
+    }
+
+    @Test
+    fun `a blank persisted prompt does not overwrite the prompt the config file resolved`(@TempDir dir: java.io.File) {
+        // The shape that silently broke toikeybot: state.json carries an empty prompts block
+        // (written the moment any unrelated mutation persisted state) while config.yaml has a
+        // real prompt. Restoring the blank one left the bot with no instruction to substitute
+        // anything, so every transform matched its input and the bot posted nothing at all.
+        val (freshAdmin, personality) = adminWithPersistence(StatePersistence(java.io.File(dir, "state.json")))
+        val fromConfig = testBotDefinition(key = "blampbot").prompts.transform
+        assertTrue(fromConfig.isNotBlank(), "fixture should start with a real transform prompt")
+
+        freshAdmin.applyPersistedState(
+            PersistedState(
+                bots = mapOf(
+                    "blampbot" to PersistedBotState(
+                        prompts = PersistedPrompts(voice = "", transform = "", wisdom = "", request = "")
+                    )
+                )
+            )
+        )
+
+        assertEquals(fromConfig, personality.definition.prompts.transform)
+        assertEquals(fromConfig, freshAdmin.botConfig("blampbot")!!.prompts.transform)
+    }
+
+    @Test
+    fun `a non-blank persisted prompt still overrides the config file's prompt`(@TempDir dir: java.io.File) {
+        // The other half of the rule: blank means "never set", but a real edit must still win,
+        // or GUI tuning would stop surviving a restart.
+        val (freshAdmin, personality) = adminWithPersistence(StatePersistence(java.io.File(dir, "state.json")))
+        val edited = "replace the BEST word or word part with \"{UPPER}\"; here's the string: "
+
+        freshAdmin.applyPersistedState(
+            PersistedState(
+                bots = mapOf(
+                    "blampbot" to PersistedBotState(
+                        prompts = PersistedPrompts(voice = "a pirate", transform = edited, wisdom = "", request = "")
+                    )
+                )
+            )
+        )
+
+        assertEquals(edited, personality.definition.prompts.transform)
+        assertEquals("a pirate", personality.definition.prompts.voice)
+    }
+
+    // ---- Model selection / replay -------------------------------------------------------
+
+    private fun registryOf(vararg keys: String, default: String = keys.first()) =
+        com.github.twitch4j.chatbot.kotlin.core.ModelRegistry(
+            keys.map { com.github.twitch4j.chatbot.kotlin.core.RegisteredModel(it, AIClient { "n/a" }) },
+            defaultKey = default,
+        )
+
+    @Test
+    fun `listModels and selectedModel are empty-ish without a registry, populated with one`() {
+        assertEquals(emptyList<String>(), admin.listModels())
+        assertNull(admin.selectedModel())
+
+        val registry = registryOf("gemini", "gemma3")
+        val selected = com.github.twitch4j.chatbot.kotlin.core.SelectedModelState(registry.defaultKey)
+        val wired = AdminController(
+            personalities = emptyList(),
+            clients = emptyMap(),
+            activityBus = activityBus,
+            mockModeState = mockModeState,
+            mockAiClient = MockAIClient(),
+            commonConfig = commonConfig,
+            modelRegistry = registry,
+            selectedModelState = selected,
+        )
+
+        assertEquals(listOf("gemini", "gemma3"), wired.listModels())
+        assertEquals("gemini", wired.selectedModel())
+    }
+
+    @Test
+    fun `setSelectedModel updates state for a known key, rejects an unknown one, no-ops without a registry`() {
+        assertFalse(admin.setSelectedModel("gemini"))
+
+        val registry = registryOf("gemini", "gemma3")
+        val selected = com.github.twitch4j.chatbot.kotlin.core.SelectedModelState(registry.defaultKey)
+        val wired = AdminController(
+            personalities = emptyList(),
+            clients = emptyMap(),
+            activityBus = activityBus,
+            mockModeState = mockModeState,
+            mockAiClient = MockAIClient(),
+            commonConfig = commonConfig,
+            modelRegistry = registry,
+            selectedModelState = selected,
+        )
+
+        assertTrue(wired.setSelectedModel("gemma3"))
+        assertEquals("gemma3", selected.key)
+        assertFalse(wired.setSelectedModel("does-not-exist"))
+        assertEquals("gemma3", selected.key)
+    }
+
+    @Test
+    fun `replayCandidates and runReplay are null without an evaluator, rejects non-positive inputs`() {
+        assertNull(admin.replayCandidates("blampbot", days = 7))
+        assertNull(admin.runReplay("blampbot", days = 7, limit = 10, runsPerModel = 3))
+    }
+
+    @Test
+    fun `runReplay is null when a registry exists but nothing is currently selected`(@TempDir dir: java.io.File) {
+        val registry = registryOf("gemini")
+        val evaluator = com.github.twitch4j.chatbot.kotlin.core.ModelReplayEvaluator(com.github.twitch4j.chatbot.kotlin.core.ActivityLog(dir), registry)
+        val wired = AdminController(
+            personalities = emptyList(),
+            clients = emptyMap(),
+            activityBus = activityBus,
+            mockModeState = mockModeState,
+            mockAiClient = MockAIClient(),
+            commonConfig = commonConfig,
+            replayEvaluator = evaluator,
+            modelRegistry = registry,
+            selectedModelState = null,
+        )
+
+        assertNull(wired.runReplay("blampbot", days = 7, limit = 10, runsPerModel = 2))
+    }
+
+    @Test
+    fun `runReplay pulls candidates from the log and replays them against whichever model is currently selected`(@TempDir dir: java.io.File) {
+        val log = com.github.twitch4j.chatbot.kotlin.core.ActivityLog(dir)
+        val now = java.time.Instant.now()
+        log.append(
+            ActivityEvent.AiCall(botKey = "blampbot", prompt = "buttify: the hamptons", response = "the buttamptons", mocked = false, timestamp = now.minusMillis(50))
+        )
+        log.append(
+            ActivityEvent.Outgoing(
+                botKey = "blampbot", channel = "testchannel", message = "the buttamptons", manual = false,
+                sourceUser = "someviewer", sourceMessage = "the hamptons", timestamp = now,
+            )
+        )
+
+        val registry = registryOf("gemini", "gemma3")
+        val selected = com.github.twitch4j.chatbot.kotlin.core.SelectedModelState("gemma3")
+        val evaluator = com.github.twitch4j.chatbot.kotlin.core.ModelReplayEvaluator(log, registry)
+        val wired = AdminController(
+            personalities = emptyList(),
+            clients = emptyMap(),
+            activityBus = activityBus,
+            mockModeState = mockModeState,
+            mockAiClient = MockAIClient(),
+            commonConfig = commonConfig,
+            replayEvaluator = evaluator,
+            modelRegistry = registry,
+            selectedModelState = selected,
+        )
+
+        val candidates = wired.replayCandidates("blampbot", days = 7)
+        assertEquals(1, candidates!!.size)
+        assertEquals("the hamptons", candidates.single().sourceMessage)
+
+        val results = wired.runReplay("blampbot", days = 7, limit = 10, runsPerModel = 2)
+        assertEquals(1, results!!.size)
+        assertEquals(2, results.single().runs.size)
+        assertTrue(results.single().runs.all { it.modelKey == "gemma3" })
+    }
+
+    // ---- Recent mainline targets ---------------------------------------------------------
+
+    @Test
+    fun `recent mainline target methods are empty-ish without one wired up`() {
+        assertEquals(emptyList<String>(), admin.recentMainlineTargets())
+        assertEquals(0, admin.recentMainlineTargetLimit())
+        assertFalse(admin.setRecentMainlineTargetLimit(5))
+    }
+
+    @Test
+    fun `recent mainline target methods read through to the shared tracker`() {
+        val tracker = com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets(size = 3)
+        tracker.record("someviewer")
+        val wired = AdminController(
+            personalities = emptyList(),
+            clients = emptyMap(),
+            activityBus = activityBus,
+            mockModeState = mockModeState,
+            mockAiClient = MockAIClient(),
+            commonConfig = commonConfig,
+            recentMainlineTargets = tracker,
+        )
+
+        assertEquals(listOf("someviewer"), wired.recentMainlineTargets())
+        assertEquals(3, wired.recentMainlineTargetLimit())
+
+        assertTrue(wired.setRecentMainlineTargetLimit(1))
+        assertEquals(1, wired.recentMainlineTargetLimit())
+        assertEquals(1, tracker.size)
+
+        assertFalse(wired.setRecentMainlineTargetLimit(-1))
+        assertEquals(1, wired.recentMainlineTargetLimit())
     }
 }

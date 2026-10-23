@@ -66,8 +66,6 @@ class MainlinePool(
         lastUser = userName
     }
 
-    fun printCooldownMessage() = cooldowns.printMainlineCooldownMessage()
-
     fun mainlineStatus(): CooldownStatus = cooldowns.snapshot().mainline
     val intervalMinimumMs: Long get() = cooldowns.snapshot().mainlineIntervalMinimumMs
     val intervalMaximumMs: Long get() = cooldowns.snapshot().mainlineIntervalMaximumMs

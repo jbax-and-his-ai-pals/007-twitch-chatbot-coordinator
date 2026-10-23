@@ -143,6 +143,36 @@ data class DefaultsConfig(
     val cooldowns: CooldownDefaults = CooldownDefaults(),
 )
 
+/**
+ * One selectable LLM the GUI can route calls to - [provider] "vertex" is the real, billed
+ * Gemini client ([AIModel], [key] is ignored for it since there's only one); "ollama" is a
+ * locally-run model served by [Ollama](https://ollama.com) (`ollama pull gemma3` etc.),
+ * addressed by [modelName] (defaults to [key] itself when omitted, so e.g. `key: "phi4-mini"`
+ * with no `model_name` just calls Ollama's `phi4-mini`).
+ */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class ModelOption(
+    val key: String = "",
+    val provider: String = "",
+    val modelName: String? = null,
+)
+
+/**
+ * Every LLM the running app can route a bot's calls to, and which one is live by default -
+ * see [ModelRegistry]. Local (Ollama) models are entirely optional: the default config
+ * declares just the real Gemini client, so nothing changes for anyone who hasn't set up
+ * Ollama.
+ */
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class ModelsConfig(
+    /** Where to reach a locally-running Ollama server - only used by `provider: "ollama"` entries below. */
+    val ollamaBaseUrl: String = "http://localhost:11434",
+    val default: String = "gemini",
+    val available: List<ModelOption> = listOf(ModelOption(key = "gemini", provider = "vertex")),
+)
+
 /** One bot's raw config block, as parsed straight from YAML. */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 @JsonIgnoreProperties(ignoreUnknown = true)

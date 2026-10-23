@@ -13,6 +13,7 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
+import com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets
 import com.github.twitch4j.chatbot.kotlin.core.TransformConfig
 import com.github.twitch4j.chatbot.kotlin.core.TransformWord
 import com.github.twitch4j.chatbot.kotlin.core.testBotDefinition
@@ -60,6 +61,7 @@ class ConfiguredPersonalityTest {
         calloutWords: List<String> = listOf(),
         calloutResponseOverrides: Map<String, String> = mapOf(),
         activityBus: ActivityBus = ActivityBus(),
+        recentTargets: RecentMainlineTargets = RecentMainlineTargets(),
     ) = ConfiguredPersonality(
         bot = testBotDefinition(
             triggerKeywords = listOf("buttsbot", "neobuttsbot"),
@@ -72,6 +74,7 @@ class ConfiguredPersonalityTest {
         channel = "testchannel",
         genericAI = GenericAI(fakeAI),
         activityBus = activityBus,
+        recentTargets = recentTargets,
     )
 
     private fun dispatch(p: ConfiguredPersonality, event: ChannelMessageEvent): PersonalityIntent {
@@ -193,6 +196,48 @@ class ConfiguredPersonalityTest {
     fun `an otherwise-unremarkable message becomes eligible for the mainline transform`() {
         val intent = dispatch(personality(), eventFrom("just a normal chat message, nothing special"))
         assertTrue(intent is PersonalityIntent.Mainline)
+    }
+
+    @Test
+    fun `a user recorded as a recent mainline target is not offered the mainline intent`() {
+        val recentTargets = RecentMainlineTargets(size = 3).also { it.record("someviewer") }
+        val p = personality(recentTargets = recentTargets)
+
+        val intent = dispatch(p, eventFrom("just a normal chat message, nothing special", userName = "someviewer"))
+
+        assertTrue(intent is PersonalityIntent.None)
+    }
+
+    @Test
+    fun `a user NOT among the recent mainline targets is still offered the mainline intent`() {
+        val recentTargets = RecentMainlineTargets(size = 3).also { it.record("someoneelse") }
+        val p = personality(recentTargets = recentTargets)
+
+        val intent = dispatch(p, eventFrom("just a normal chat message, nothing special", userName = "someviewer"))
+
+        assertTrue(intent is PersonalityIntent.Mainline)
+    }
+
+    @Test
+    fun `the exempt channel owner keeps getting the mainline intent no matter how often they were targeted`() {
+        val recentTargets = RecentMainlineTargets(size = 3, exemptUser = "jerbtrundles")
+        repeat(5) { recentTargets.record("jerbtrundles") }
+        val p = personality(recentTargets = recentTargets)
+
+        val intent = dispatch(p, eventFrom("just a normal chat message, nothing special", userName = "jerbtrundles"))
+
+        assertTrue(intent is PersonalityIntent.Mainline)
+    }
+
+    @Test
+    fun `a successful actMainline records the targeted user into the shared recent-targets tracker`() {
+        val recentTargets = RecentMainlineTargets(size = 3)
+        val p = personality(recentTargets = recentTargets)
+        fakeAI.responseProvider = { "this got TESTWORDED nicely" }
+
+        p.actMainline(eventFrom("just a normal chat message here", userName = "someviewer"))
+
+        assertTrue(recentTargets.contains("someviewer"))
     }
 
     @Test

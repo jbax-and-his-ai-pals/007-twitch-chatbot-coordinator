@@ -721,4 +721,168 @@ class GuiServerTest {
 
         assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
     }
+
+    // ---- Model selection / replay ----------------------------------------------------------
+
+    private fun adminWithModels(
+        registry: com.github.twitch4j.chatbot.kotlin.core.ModelRegistry?,
+        replayEvaluator: com.github.twitch4j.chatbot.kotlin.core.ModelReplayEvaluator? = null,
+    ): AdminController {
+        val client: ITwitchClient = mockk(relaxed = true)
+        every { client.chat } returns mockk(relaxed = true)
+        val personality = ConfiguredPersonality(
+            bot = testBotDefinition(key = "blampbot", accountUsername = "blampbot", triggerKeywords = listOf("blampbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(FakeAIClient()),
+            activityBus = ActivityBus(),
+        )
+        return AdminController(
+            personalities = listOf(personality),
+            clients = mapOf("blampbot" to client),
+            activityBus = ActivityBus(),
+            mockModeState = MockModeState(),
+            mockAiClient = MockAIClient(),
+            commonConfig = CommonConfig(),
+            modelRegistry = registry,
+            selectedModelState = registry?.let { com.github.twitch4j.chatbot.kotlin.core.SelectedModelState(it.defaultKey) },
+            replayEvaluator = replayEvaluator,
+        )
+    }
+
+    private fun registryOf(vararg keys: String) = com.github.twitch4j.chatbot.kotlin.core.ModelRegistry(
+        keys.map { com.github.twitch4j.chatbot.kotlin.core.RegisteredModel(it, AIClient { "n/a" }) },
+        defaultKey = keys.first(),
+    )
+
+    @Test
+    fun `GET api models lists available keys and the current selection`() = testApplication {
+        val admin = adminWithModels(registryOf("gemini", "gemma3"))
+        application { guiModule(admin) }
+
+        val response = client.get("/api/models")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val dto = json.decodeFromString<ModelsDto>(response.bodyAsText())
+        assertEquals(listOf("gemini", "gemma3"), dto.available)
+        assertEquals("gemini", dto.selected)
+    }
+
+    @Test
+    fun `POST api model switches the selection, rejects an unknown key`() = testApplication {
+        val admin = adminWithModels(registryOf("gemini", "gemma3"))
+        application { guiModule(admin) }
+
+        val ok = client.post("/api/model") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(SelectedModelDto.serializer(), SelectedModelDto("gemma3")))
+        }
+        assertEquals(HttpStatusCode.OK, ok.status)
+        assertEquals("gemma3", json.decodeFromString<ModelsDto>(client.get("/api/models").bodyAsText()).selected)
+
+        val rejected = client.post("/api/model") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(SelectedModelDto.serializer(), SelectedModelDto("does-not-exist")))
+        }
+        assertEquals(HttpStatusCode.NotFound, rejected.status)
+    }
+
+    @Test
+    fun `GET api replay candidates requires botKey and is unavailable without an evaluator`() = testApplication {
+        val admin = adminWithModels(registryOf("gemini"))
+        application { guiModule(admin) }
+
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/replay/candidates").status)
+        assertEquals(HttpStatusCode.ServiceUnavailable, client.get("/api/replay/candidates?botKey=blampbot").status)
+    }
+
+    @Test
+    fun `POST api replay run replays logged candidates against whichever model is currently selected`(@TempDir dir: File) = testApplication {
+        val log = com.github.twitch4j.chatbot.kotlin.core.ActivityLog(dir)
+        val now = Instant.now()
+        log.append(ActivityEvent.AiCall(botKey = "blampbot", prompt = "buttify: the hamptons", response = "the buttamptons", mocked = false, timestamp = now.minusMillis(50)))
+        log.append(
+            ActivityEvent.Outgoing(
+                botKey = "blampbot", channel = "testchannel", message = "the buttamptons", manual = false,
+                sourceUser = "someviewer", sourceMessage = "the hamptons", timestamp = now,
+            )
+        )
+        val registry = registryOf("gemini")
+        val evaluator = com.github.twitch4j.chatbot.kotlin.core.ModelReplayEvaluator(log, registry)
+        val admin = adminWithModels(registry, evaluator)
+        application { guiModule(admin) }
+
+        val candidatesResponse = client.get("/api/replay/candidates?botKey=blampbot&days=7")
+        assertEquals(HttpStatusCode.OK, candidatesResponse.status)
+        val candidates = json.decodeFromString<List<ReplayCandidateDto>>(candidatesResponse.bodyAsText())
+        assertEquals("the hamptons", candidates.single().sourceMessage)
+
+        val runResponse = client.post("/api/replay/run") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(ReplayRunRequestDto.serializer(), ReplayRunRequestDto(botKey = "blampbot", runsPerModel = 2)))
+        }
+        assertEquals(HttpStatusCode.OK, runResponse.status)
+        val results = json.decodeFromString<List<ReplayResultDto>>(runResponse.bodyAsText())
+        assertEquals(1, results.size)
+        assertEquals(2, results.single().runs.size)
+        assertTrue(results.single().runs.all { it.modelKey == "gemini" })
+    }
+
+    // ---- Recent mainline targets ------------------------------------------------------------
+
+    private fun adminWithRecentTargets(tracker: com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets?): AdminController {
+        val client: ITwitchClient = mockk(relaxed = true)
+        every { client.chat } returns mockk(relaxed = true)
+        val personality = ConfiguredPersonality(
+            bot = testBotDefinition(key = "blampbot", accountUsername = "blampbot", triggerKeywords = listOf("blampbot")),
+            client = client,
+            channel = "testchannel",
+            genericAI = GenericAI(FakeAIClient()),
+            activityBus = ActivityBus(),
+        )
+        return AdminController(
+            personalities = listOf(personality),
+            clients = mapOf("blampbot" to client),
+            activityBus = ActivityBus(),
+            mockModeState = MockModeState(),
+            mockAiClient = MockAIClient(),
+            commonConfig = CommonConfig(),
+            recentMainlineTargets = tracker,
+        )
+    }
+
+    @Test
+    fun `GET api recent-targets reports the limit and currently-tracked users`() = testApplication {
+        val tracker = com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets(size = 3)
+        tracker.record("someviewer")
+        val admin = adminWithRecentTargets(tracker)
+        application { guiModule(admin) }
+
+        val response = client.get("/api/recent-targets")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val dto = json.decodeFromString<RecentMainlineTargetsDto>(response.bodyAsText())
+        assertEquals(3, dto.limit)
+        assertEquals(listOf("someviewer"), dto.recent)
+    }
+
+    @Test
+    fun `POST api recent-targets limit updates the tracked size, rejects a negative value`() = testApplication {
+        val tracker = com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets(size = 3)
+        val admin = adminWithRecentTargets(tracker)
+        application { guiModule(admin) }
+
+        val ok = client.post("/api/recent-targets/limit") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(RecentMainlineTargetLimitDto.serializer(), RecentMainlineTargetLimitDto(1)))
+        }
+        assertEquals(HttpStatusCode.OK, ok.status)
+        assertEquals(1, json.decodeFromString<RecentMainlineTargetsDto>(client.get("/api/recent-targets").bodyAsText()).limit)
+
+        val rejected = client.post("/api/recent-targets/limit") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(RecentMainlineTargetLimitDto.serializer(), RecentMainlineTargetLimitDto(-1)))
+        }
+        assertEquals(HttpStatusCode.NotFound, rejected.status)
+    }
 }

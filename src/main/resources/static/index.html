@@ -10,7 +10,9 @@
   <header class="topbar">
     <h1>blamputts control panel</h1>
     <div class="mock-toggle">
+      <a class="quality-back-link" href="/replay.html">model replay &rarr;</a>
       <a class="quality-back-link" href="/quality.html">response quality &rarr;</a>
+      <select id="modelSelect" class="model-select" title="Which model real (non-mocked) calls use"></select>
       <span id="connStatus" class="conn-dot" title="WebSocket connection"></span>
       <label class="switch">
         <input type="checkbox" id="mockSwitch" />
@@ -84,6 +86,15 @@
         <div class="card-body">
           <p class="hint">Words and users every bot recognizes alike, on top of whatever each bot adds itself.</p>
           <div id="commonConfigBody"></div>
+
+          <div class="config-block">
+            <h4>Recent mainline targets</h4>
+            <p class="hint">No bot will mainline-transform one of these chatters until they age out - shared across every bot, so the group doesn't pile onto the same person.</p>
+            <div class="config-numfields">
+              <label>Protect last <input type="number" id="recentTargetsLimit" class="cfg-num" min="0" max="20" /> chatters</label>
+            </div>
+            <div id="recentTargetsList" class="chip-list"></div>
+          </div>
         </div>
       </div>
 

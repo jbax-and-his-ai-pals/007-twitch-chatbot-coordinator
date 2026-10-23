@@ -17,6 +17,8 @@ import com.github.twitch4j.chatbot.kotlin.core.MessageLengthConfig
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
+import com.github.twitch4j.chatbot.kotlin.core.ModelReplayEvaluator
+import com.github.twitch4j.chatbot.kotlin.core.ModelRegistry
 import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.PersistedActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.PersistedBotState
@@ -26,7 +28,11 @@ import com.github.twitch4j.chatbot.kotlin.core.PersistedPrompts
 import com.github.twitch4j.chatbot.kotlin.core.PersistedState
 import com.github.twitch4j.chatbot.kotlin.core.PersistedTransformWord
 import com.github.twitch4j.chatbot.kotlin.core.QualityReport
+import com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets
+import com.github.twitch4j.chatbot.kotlin.core.ReplayCandidate
+import com.github.twitch4j.chatbot.kotlin.core.ReplayResult
 import com.github.twitch4j.chatbot.kotlin.core.ResponseQualityAnalyzer
+import com.github.twitch4j.chatbot.kotlin.core.SelectedModelState
 import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.TransformWord
 import com.github.twitch4j.common.events.domain.EventChannel
@@ -132,6 +138,10 @@ class AdminController(
     private val statePersistence: StatePersistence? = null,
     private val activityLog: ActivityLog? = null,
     private val qualityAnalyzer: ResponseQualityAnalyzer? = null,
+    private val modelRegistry: ModelRegistry? = null,
+    private val selectedModelState: SelectedModelState? = null,
+    private val replayEvaluator: ModelReplayEvaluator? = null,
+    private val recentMainlineTargets: RecentMainlineTargets? = null,
 ) {
     private val personalityByKey = personalities.associateBy { it.name }
     private val disabledBots = mutableSetOf<String>()
@@ -174,6 +184,20 @@ class AdminController(
     fun mainlinePoolPeers(botKey: String): List<String> {
         val pool = personalityByKey[botKey]?.mainlinePool ?: return emptyList()
         return personalities.filter { it.name != botKey && it.mainlinePool === pool }.map { it.name }
+    }
+
+    /** Chatters no bot will mainline-transform right now, oldest-first - empty if [recentMainlineTargets] wasn't wired up. */
+    fun recentMainlineTargets(): List<String> = recentMainlineTargets?.snapshot() ?: emptyList()
+
+    /** How many recently-targeted chatters are currently protected - 0 if [recentMainlineTargets] wasn't wired up. */
+    fun recentMainlineTargetLimit(): Int = recentMainlineTargets?.size ?: 0
+
+    /** Returns false if [recentMainlineTargets] wasn't wired up, or [limit] is negative. */
+    fun setRecentMainlineTargetLimit(limit: Int): Boolean {
+        if (recentMainlineTargets == null || limit < 0) return false
+        recentMainlineTargets.setSize(limit)
+        logCommonConfigChange("recent mainline target limit set: $limit")
+        return true
     }
 
     /** Returns false if [botKey] doesn't match any configured bot. */
@@ -267,6 +291,46 @@ class AdminController(
     fun generateQualityReport(days: Int): QualityReport? {
         if (days < 1) return null
         return qualityAnalyzer?.analyze(days)
+    }
+
+    /** Every model key the GUI's model dropdown can offer - empty if none configured (no [modelRegistry]). */
+    fun listModels(): List<String> = modelRegistry?.availableKeys ?: emptyList()
+
+    /** The model real (non-mocked) calls currently route to - null if model selection isn't wired up. */
+    fun selectedModel(): String? = selectedModelState?.key
+
+    /** Returns false if model selection isn't wired up, or [key] isn't one of [listModels]. */
+    fun setSelectedModel(key: String): Boolean {
+        if (modelRegistry == null || selectedModelState == null || key !in modelRegistry.availableKeys) return false
+        selectedModelState.key = key
+        Messaging.info("Selected model set: $key")
+        return true
+    }
+
+    /**
+     * Up to [limit] most-recent distinct original chat messages [botKey] actually transformed
+     * for real (not mocked) in the last [days] days - candidates for [runReplay]. Null if no
+     * [replayEvaluator] was configured (activity logging disabled).
+     */
+    fun replayCandidates(botKey: String, days: Int, limit: Int = 20): List<ReplayCandidate>? {
+        if (days < 1 || limit < 1) return null
+        return replayEvaluator?.candidates(botKey, days, limit)
+    }
+
+    /**
+     * Replays every candidate returned by [replayCandidates] against whichever model is
+     * currently selected (the same dropdown [setSelectedModel] drives) - the actual GPU/API
+     * calls happen here, [runsPerModel] of them per candidate, and only here: nothing in this
+     * class or [ModelReplayEvaluator] ever reaches Twitch. Null if no [replayEvaluator] was
+     * configured, or if no model is currently selected. Switching the dropdown and calling
+     * this again is the intended way to compare models one at a time.
+     */
+    fun runReplay(botKey: String, days: Int, limit: Int, runsPerModel: Int): List<ReplayResult>? {
+        val evaluator = replayEvaluator ?: return null
+        val modelKey = selectedModelState?.key ?: return null
+        if (days < 1 || limit < 1 || runsPerModel < 1) return null
+        val candidates = evaluator.candidates(botKey, days, limit)
+        return candidates.map { candidate -> evaluator.replay(candidate, modelKey, runsPerModel) }
     }
 
     fun mockOverrides(): Map<String, String> = mockAiClient.overridesSnapshot()
@@ -630,6 +694,14 @@ class AdminController(
     private fun HelloTriggerDetail.toPersisted() = PersistedHelloTrigger(matchType, value, alsoContains)
 
     /**
+     * Assigns [persisted] to [apply] only when it carries something. See [applyPersistedState]
+     * for why a blank persisted prompt must not overwrite the config file's own value.
+     */
+    private inline fun applyPromptIfSet(persisted: String, apply: (String) -> Unit) {
+        if (persisted.isNotBlank()) apply(persisted)
+    }
+
+    /**
      * Restores previously-persisted tuning by direct field assignment on the already-resolved
      * [BotDefinition]/[com.github.twitch4j.chatbot.kotlin.core.Cooldowns] instances - NOT by
      * replaying through `config.yaml`'s raw/`..._add` merge logic, since [state] already holds
@@ -651,10 +723,17 @@ class AdminController(
             bot.moods.firstOrNull { it.name == persisted.activeMood }?.let { bot.activeMood = it }
             bot.transform.words = persisted.transformWords.map { TransformWord(it.word, it.weight) }
             bot.transform.selfQuoteMarker = persisted.selfQuoteMarker
-            bot.prompts.voice = persisted.prompts.voice
-            bot.prompts.transform = persisted.prompts.transform
-            bot.prompts.wisdom = persisted.prompts.wisdom
-            bot.prompts.request = persisted.prompts.request
+            // Blank means "nothing was ever set here", not "the user deliberately cleared this".
+            // A blank prompt is persisted the moment ANY unrelated config mutation happens
+            // (persistState writes every field for every bot), which made an empty transform
+            // prompt load-bearing: it silently overwrote config.yaml's prompt on the next
+            // startup, leaving the bot running with no instruction to substitute anything, so
+            // every transform came back unchanged and the bot posted nothing. Keeping the
+            // file's value on blank makes that failure mode impossible.
+            applyPromptIfSet(persisted.prompts.voice) { bot.prompts.voice = it }
+            applyPromptIfSet(persisted.prompts.transform) { bot.prompts.transform = it }
+            applyPromptIfSet(persisted.prompts.wisdom) { bot.prompts.wisdom = it }
+            applyPromptIfSet(persisted.prompts.request) { bot.prompts.request = it }
             personality.minimumMessagesBetween = persisted.minimumMessagesBetween
             personality.setCooldownConfig(CooldownType.WISDOM, persisted.wisdomCooldownMs)
             personality.setCooldownConfig(CooldownType.CALLOUT, persisted.calloutCooldownMs)

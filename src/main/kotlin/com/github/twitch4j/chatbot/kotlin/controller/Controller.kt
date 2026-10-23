@@ -16,8 +16,12 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.MessageDispatcher
 import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
+import com.github.twitch4j.chatbot.kotlin.core.ModelReplayEvaluator
+import com.github.twitch4j.chatbot.kotlin.core.ModelRegistry
 import com.github.twitch4j.chatbot.kotlin.core.Personality
+import com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets
 import com.github.twitch4j.chatbot.kotlin.core.ResponseQualityAnalyzer
+import com.github.twitch4j.chatbot.kotlin.core.SelectedModelState
 import com.github.twitch4j.chatbot.kotlin.core.StatePersistence
 import com.github.twitch4j.chatbot.kotlin.core.SwitchableAIClient
 import com.github.twitch4j.chatbot.kotlin.core.engine.ConfiguredPersonality
@@ -67,10 +71,23 @@ class Controller(private val configuration: Configuration) {
     private val mockAiClient = MockAIClient()
     private val commonConfig = CommonConfig.from(configuration.defaults)
 
+    // Every LLM the GUI's model dropdown can switch to (real Gemini plus any local Ollama
+    // models declared in config.yaml's `models:` block), and which one is live right now.
+    // Shared across every bot's SwitchableAIClient, same as mockModeState.
+    private val modelRegistry = ModelRegistry.from(configuration.models)
+    private val selectedModelState = SelectedModelState(modelRegistry.defaultKey)
+
+    // Shared across every bot regardless of mainline_pool membership - so the group as a
+    // whole spreads mainline transforms across chatters instead of any one person getting
+    // hit repeatedly just because a different bot's turn came up. See RecentMainlineTargets.
+    private val recentMainlineTargets = RecentMainlineTargets(size = configuration.recentMainlineTargetLimit)
+
     // Bots listed under config.yaml's `mainline_pool` rotate through one shared ambient
     // timer instead of each running its own - see MainlinePool's doc comment. Seeded from
-    // the FIRST listed bot's own resolved mainline cooldown config (e.g. toikeybot's).
-    // Fewer than two entries means no pooling: every bot keeps its own independent timer.
+    // the FIRST listed bot's own resolved mainline cooldown config, so which bot that is
+    // (and therefore which bot's interval bounds the whole pool inherits) follows the order
+    // of that list, not this code. Fewer than two entries means no pooling: every bot keeps
+    // its own independent timer.
     private val sharedMainlinePool: MainlinePool? = configuration.mainlinePool.takeIf { it.size >= 2 }?.let { poolKeys ->
         val seedKey = poolKeys.first()
         val seedDefinition = definitions.firstOrNull { it.key == seedKey }
@@ -84,11 +101,15 @@ class Controller(private val configuration: Configuration) {
             client = clients.getValue(def.key),
             channel = primaryChannel,
             genericAI = GenericAI(
-                SwitchableAIClient(botKey = def.key, state = mockModeState, activityBus = activityBus, mock = mockAiClient)
+                SwitchableAIClient(
+                    botKey = def.key, state = mockModeState, activityBus = activityBus, mock = mockAiClient,
+                    registry = modelRegistry, selectedModel = selectedModelState,
+                )
             ),
             activityBus = activityBus,
             commonConfig = commonConfig,
             mainlinePool = if (def.key in configuration.mainlinePool) sharedMainlinePool else null,
+            recentTargets = recentMainlineTargets,
         )
     }
 
@@ -103,6 +124,10 @@ class Controller(private val configuration: Configuration) {
         botReferenceForms = definitions.associate { it.key to TriggerMatcher.referenceForms(it.triggerKeywords) },
         aiClient = SwitchableAIClient(botKey = "quality-analyzer", state = mockModeState, activityBus = activityBus, mock = mockAiClient),
     )
+
+    // Read-only over the persisted logs too, same as qualityAnalyzer - only replay() itself
+    // ever calls out to a model.
+    private val replayEvaluator = ModelReplayEvaluator(activityLog = activityLog, registry = modelRegistry)
 
     // Only used to launch ActivityLog's background collector - never cancelled, since this
     // process has no formal shutdown path today (matches how the rest of the app runs until
@@ -120,6 +145,10 @@ class Controller(private val configuration: Configuration) {
         statePersistence = statePersistence,
         activityLog = activityLog,
         qualityAnalyzer = qualityAnalyzer,
+        modelRegistry = modelRegistry,
+        selectedModelState = selectedModelState,
+        replayEvaluator = replayEvaluator,
+        recentMainlineTargets = recentMainlineTargets,
     )
 
     init {

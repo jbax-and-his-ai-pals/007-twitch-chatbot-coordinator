@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>blamputts model replay</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Model replay</h1>
+    <a class="quality-back-link" href="/">&larr; back to control panel</a>
+  </header>
+
+  <main class="quality-layout">
+    <p class="hint">
+      Pulls original chat messages a bot actually transformed (from the persisted activity
+      logs) and replays the exact prompt that produced the real, shipped response against
+      whichever model is currently selected in the control panel, several times each, timing
+      each call - so a local model's quality and speed can be compared against what actually
+      went out to chat. Nothing here ever sends anything to Twitch. Switch the model dropdown
+      in the control panel, come back, and run again to compare.
+    </p>
+
+    <div class="quality-controls replay-controls">
+      <label class="quality-days-label">
+        Bot
+        <select id="replayBotSelect"></select>
+      </label>
+      <label class="quality-days-label">
+        Days to pull from
+        <input type="number" id="replayDays" value="7" min="1" max="90" />
+      </label>
+      <label class="quality-days-label">
+        Max messages
+        <input type="number" id="replayLimit" value="10" min="1" max="50" />
+      </label>
+      <label class="quality-days-label">
+        Runs per message
+        <input type="number" id="replayRuns" value="3" min="1" max="10" />
+      </label>
+    </div>
+
+    <div class="quality-controls">
+      <span class="quality-days-label">Current model: <strong id="currentModelEl">-</strong></span>
+      <a class="quality-back-link" href="/">switch model &rarr;</a>
+    </div>
+
+    <div class="quality-controls">
+      <button type="button" id="previewCandidatesBtn">Load messages</button>
+      <button type="button" id="runReplayBtn">Run replay</button>
+      <span id="replayStatus" class="quality-status"></span>
+    </div>
+
+    <div id="replayPreview" class="replay-preview" style="display:none"></div>
+
+    <div id="replayResults" class="replay-results"></div>
+  </main>
+
+  <script src="/replay.js"></script>
+</body>
+</html>

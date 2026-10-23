@@ -17,6 +17,7 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
+import com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets
 import kotlin.random.Random
 
 /**
@@ -34,6 +35,9 @@ import kotlin.random.Random
  * existing tests are unaffected; the GUI wires in a shared one via [com.github.twitch4j.chatbot.kotlin.controller.Controller].
  * [commonConfig] likewise defaults to an empty, unshared instance in tests; the GUI wires
  * in one shared instance across every bot, for words/users every bot should recognize.
+ * [recentTargets] defaults to a fresh, unshared instance in tests too; the GUI wires in one
+ * shared instance across every bot, so the group as a whole doesn't keep mainline-transforming
+ * the same few chatters back to back - see [RecentMainlineTargets].
  */
 class ConfiguredPersonality(
     private val bot: BotDefinition,
@@ -43,6 +47,7 @@ class ConfiguredPersonality(
     private val activityBus: ActivityBus = ActivityBus(),
     private val commonConfig: CommonConfig = CommonConfig(),
     override val mainlinePool: MainlinePool? = null,
+    private val recentTargets: RecentMainlineTargets = RecentMainlineTargets(),
 ) : Personality {
     override val name = bot.key
     override val definition: BotDefinition get() = bot
@@ -78,15 +83,9 @@ class ConfiguredPersonality(
     private val easterEggFeatures = bot.features.filterIsInstance<FeatureConfig.EasterEgg>()
 
     override fun determineIntent(event: ChannelMessageEvent, processed: ProcessedEvent): PersonalityIntent {
-        // The mainline line comes from the shared pool when pooled - printing cooldowns.
-        // printMainlineCooldownMessage() here would show this bot's own, never-reset timer.
-        Messaging.info("COOLDOWNS: ", addNewLine = false)
-        if (mainlinePool != null) mainlinePool.printCooldownMessage() else cooldowns.printMainlineCooldownMessage()
-        cooldowns.printWisdomCooldownMessage()
-        cooldowns.printRequestCooldownMessage()
-        cooldowns.printRetryCooldownMessage()
-        cooldowns.printCalloutCooldownMessage()
-
+        // Cooldown status is no longer printed per bot here - MessageDispatcher prints one
+        // condensed two-line summary covering every personality at once, before this is
+        // called for any of them. See MessageDispatcher.printCooldownSummary.
         if (mainlinePool != null) mainlinePool.noteMessage(processed) else messagesSinceLastMainline++
 
         val eligibility = processed.eligibilityFor(bot, commonConfig)
@@ -139,10 +138,15 @@ class ConfiguredPersonality(
         }
     }
 
-    /** Checks the shared pool's timer when [mainlinePool] is set, otherwise this bot's own - see [MainlinePool]. */
+    /**
+     * [recentTargets] is checked first and applies regardless of pooling - it's shared across
+     * EVERY bot, not just this bot's own timer (or its pool's). Past that, checks the shared
+     * pool's timer when [mainlinePool] is set, otherwise this bot's own - see [MainlinePool].
+     */
     private fun canActMainline(userName: String): Boolean =
-        mainlinePool?.canAct(userName)
-            ?: cooldowns.canActMainline(userName, lastUser, messagesSinceLastMainline, bot.cooldowns.mainline.minimumMessagesBetween)
+        !recentTargets.contains(userName) &&
+            (mainlinePool?.canAct(userName)
+                ?: cooldowns.canActMainline(userName, lastUser, messagesSinceLastMainline, bot.cooldowns.mainline.minimumMessagesBetween))
 
     override fun actMainline(event: ChannelMessageEvent) {
         val word = pickTransformWord()
@@ -167,6 +171,7 @@ class ConfiguredPersonality(
                 messagesSinceLastMainline = 0
                 lastUser = event.user.name
             }
+            recentTargets.record(event.user.name)
             lastMessage = transformed.transformed
             send(channel, transformed.transformed, source = event)
         } else {

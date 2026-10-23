@@ -20,10 +20,16 @@ class MockModeState(initiallyEnabled: Boolean = true) {
 }
 
 /**
- * Routes each LLM call to either the real [AIModel] or a shared [MockAIClient], based on
+ * Routes each LLM call to either the real client or a shared [MockAIClient], based on
  * [state], and publishes every call (prompt/response/mode) as an [ActivityEvent.AiCall] so
  * the GUI can show exactly what was asked and answered - especially useful while mocked,
  * to confirm a bot's prompts still look right without spending anything on the real API.
+ *
+ * When "real" is picked: if [registry] and [selectedModel] are both given, the currently
+ * selected model is resolved fresh on every call (so flipping the GUI's model dropdown takes
+ * effect immediately, same as the mock toggle) - unknown/unset keys fall back to [real].
+ * Without them (every existing construction site, all tests), [real] alone is used, exactly
+ * as before model-switching existed.
  */
 class SwitchableAIClient(
     private val botKey: String,
@@ -31,10 +37,13 @@ class SwitchableAIClient(
     private val activityBus: ActivityBus,
     private val mock: AIClient,
     private val real: AIClient = AIModel,
+    private val registry: ModelRegistry? = null,
+    private val selectedModel: SelectedModelState? = null,
 ) : AIClient {
     override fun generateContent(prompt: String): String {
         val mocked = state.enabled
-        val response = if (mocked) mock.generateContent(prompt) else real.generateContent(prompt)
+        val realClient = selectedModel?.let { registry?.clientFor(it.key) } ?: real
+        val response = if (mocked) mock.generateContent(prompt) else realClient.generateContent(prompt)
         activityBus.publish(ActivityEvent.AiCall(botKey = botKey, prompt = prompt, response = response, mocked = mocked))
         return response
     }

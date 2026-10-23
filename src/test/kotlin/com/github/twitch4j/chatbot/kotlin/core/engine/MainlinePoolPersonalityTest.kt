@@ -11,12 +11,14 @@ import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.PersonalityIntent
 import com.github.twitch4j.chatbot.kotlin.core.ProcessedEvent
+import com.github.twitch4j.chatbot.kotlin.controller.Scheduler
 import com.github.twitch4j.chatbot.kotlin.core.testBotDefinition
 import com.github.twitch4j.common.events.domain.EventUser
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -152,5 +154,99 @@ class MainlinePoolPersonalityTest {
     @AfterEach
     fun resetMessagingBus() {
         Messaging.bus = null
+    }
+
+    // ---- "cooldown is up -> pick a random bot -> reset the shared cooldown" ----------------
+    //
+    // The tests above prove eligibility is shared. These prove the full cycle runs through the
+    // REAL dispatcher and the REAL Scheduler.pickActor - not a hand-written pickActor - so the
+    // random selection and the reset are exercised the way production runs them.
+
+    /** Real [Scheduler.pickActor] through the real pipeline - the path Controller.onChannelMessage drives. */
+    private fun dispatchReal(
+        personalities: List<ConfiguredPersonality>,
+        event: ChannelMessageEvent,
+    ): List<Personality> {
+        var seen: List<Personality> = emptyList()
+        MessageDispatcher.dispatch(personalities, event) { candidates ->
+            seen = candidates
+            Scheduler.pickActor(candidates)
+        }
+        return seen
+    }
+
+    /**
+     * True if [chat] was used to post anything. `verify` throws when the interaction never
+     * happened, so the result is wrapped rather than asserted directly - the point is to count
+     * how many of the pool's bots acted, and which one wins is random by design.
+     */
+    private fun sent(chat: ITwitchChat): Boolean =
+        runCatching { verify { chat.sendMessage("testchannel", any()) } }.isSuccess
+
+    @Test
+    fun `when the shared cooldown is up both bots are offered, and exactly one is chosen to act`() {
+        val pool = sharedPool()
+        val (clientA, chatA) = client()
+        val (clientB, chatB) = client()
+        val a = pooledPersonality("blampbot", pool, clientA)
+        val b = pooledPersonality("toikeybot", pool, clientB)
+
+        val candidates = dispatchReal(listOf(a, b), eventFrom("just an unremarkable chat message", userName = "someviewer"))
+
+        // Both pooled bots cleared the shared timer, so both were in contention...
+        assertEquals(listOf<Personality>(a, b), candidates)
+        // ...and exactly one of them was picked to fulfill it.
+        assertTrue(sent(chatA) != sent(chatB)) {
+            "exactly one pooled bot should have acted on the shared timer (blampbot=${sent(chatA)}, toikeybot=${sent(chatB)})"
+        }
+    }
+
+    @Test
+    fun `whichever bot acts resets the shared cooldown for the whole pool, letting neither act again immediately`() {
+        val pool = sharedPool()
+        val (clientA, _) = client()
+        val (clientB, _) = client()
+        val a = pooledPersonality("blampbot", pool, clientA)
+        val b = pooledPersonality("toikeybot", pool, clientB)
+        dispatchReal(listOf(a, b), eventFrom("just an unremarkable chat message", userName = "someviewer"))
+
+        // A fresh message from a DIFFERENT user (so the same-user guard can't be the reason)
+        // must find the pool back in cooldown - the interval is 60s and no time has passed, so
+        // this is only true because the acting bot reset the timer for both of them.
+        val next = eventFrom("another unremarkable chat message", userName = "anotherviewer")
+        assertTrue(a.determineIntent(next, ProcessedEvent.fromEvent(next)) is PersonalityIntent.None)
+        assertTrue(b.determineIntent(next, ProcessedEvent.fromEvent(next)) is PersonalityIntent.None)
+    }
+
+    @Test
+    fun `an invalid transform does not consume the shared cooldown, so the pool stays available`() {
+        // Deliberately a pool of ONE eligible bot. With a second pooled bot in contention the
+        // Scheduler's random pick could hand the request to a bot whose transform succeeds,
+        // which consumes the timer for real and makes this assertion fail on a coin flip -
+        // that variant passed or failed at random, so it proved nothing. With a single
+        // candidate, whether the unusable request is consumed is fully deterministic.
+        val pool = sharedPool(minimumMessagesBetween = 1)
+        val (clientA, _) = client()
+        val broken = ConfiguredPersonality(
+            bot = testBotDefinition(key = "blampbot", triggerKeywords = listOf("blampbot")),
+            client = clientA,
+            channel = "testchannel",
+            // Contains neither TESTWORD (the bot's transform word) nor anything else that could
+            // satisfy TransformedMessage, so actMainline attempts and fails.
+            genericAI = GenericAI(FakeAIClient(response = "a reply with no transform word at all")),
+            mainlinePool = pool,
+        )
+
+        dispatchReal(listOf(broken), eventFrom("just an unremarkable chat message", userName = "someviewer"))
+
+        // The candidate WAS offered the request. The counter seeds at minimumMessagesBetween
+        // (1) and this message adds one, so it should read 2 here - i.e. noteMessage ran and
+        // the request was genuinely put in front of the bot.
+        assertEquals(2, pool.messagesSinceLastMainline)
+        // ...but recordAct only runs on a *valid* transform, so the shared timer was never
+        // reset and the request is still on the table: the counter is still past the minimum
+        // (so the pool can act again) and no user was recorded as having just acted.
+        assertTrue(pool.canAct("someotherviewer"))
+        assertEquals("", pool.lastUser)
     }
 }

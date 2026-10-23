@@ -12,6 +12,53 @@ channels:
     - "thecheeseball81"
     - "jerbtrundles"
 
+# Every LLM the GUI's model dropdown can switch real (non-mocked) calls to. "default" is
+# what a fresh run starts on; switching in the GUI is session-only, never persisted (same as
+# mock mode) - a restart always comes back up on this default. Two providers:
+#   - "vertex": the real, billed Vertex AI/Gemini client - there's only one of these, so
+#     "key" here is just a label; "model_name" is ignored.
+#   - "ollama": a model served by a locally-running Ollama (https://ollama.com) instance, for
+#     free offline response-quality testing (e.g. `ollama pull gemma3`, `ollama pull
+#     phi4-mini`, then `ollama serve`). "model_name" is what `ollama list` shows for it -
+#     defaults to "key" itself if omitted.
+# Local models are entirely optional - delete every "ollama" entry below (keeping just
+# "gemini") if you haven't set up Ollama, and nothing else changes.
+models:
+    ollama_base_url: "http://localhost:11434"
+    default: "gemini"
+    available:
+        - key: "gemini"
+          provider: "vertex"
+        - key: "gemma3"
+          provider: "ollama"
+          model_name: "gemma3:4b"
+        - key: "phi4-mini"
+          provider: "ollama"
+          model_name: "phi4-mini"
+
+# Bots that share ONE ambient mainline-transform timer instead of each running its own -
+# only one of them acts per interval, chosen at random when several are eligible for the
+# same message, so the group takes turns rather than piling onto the same chat line (see
+# MainlinePool). A bot NOT listed here keeps its own independent timer, exactly as before.
+#
+# TWO things to know before editing this list:
+#   1. Fewer than two entries means no pooling at all - every bot keeps its own timer.
+#   2. The pool's timing (interval bounds, start delay, minimum messages between) is seeded
+#      from the FIRST bot listed here, so ordering matters at runtime as much as membership.
+#
+# This is the list to extend as more bots join the rotation. Note it shares the MAINLINE
+# timer only: each bot's wisdom/request/callout/retry timers stay its own.
+mainline_pool:
+    - "blampbot"
+    - "toikeybot"
+
+# How many of the most recently mainline-transformed chatters, shared across EVERY bot (not
+# just mainline_pool members - buttsbot's own independent timer respects this too), no bot
+# may target again - keeps the group from piling onto the same person's messages back to
+# back just because a different bot's turn came up. 0 disables this entirely. Also editable
+# live from the GUI's "Common configuration" panel. The channel owner is always exempt.
+recent_mainline_target_limit: 3
+
 # Shared baseline every bot starts from. message_length/similarity_threshold/cooldowns are
 # a one-time per-bot starting point (each bot can override them, then they're independent -
 # also editable per-bot from the GUI's Configure panel). excluded_users/callout_words/
@@ -247,8 +294,48 @@ bots:
             - type: "retry"
               trigger_prefix: "try again, "
 
-# Adding a third bot is just another block under `bots:` - most fields inherit from
-# `defaults` above, so a minimal new bot can be as short as:
+    # Inherits message length, similarity threshold, words, users, greetings and every
+    # non-mainline cooldown from `defaults` above. Its mainline timer comes from the
+    # `mainline_pool` at the top of this file rather than from itself, so it deliberately
+    # declares no `cooldowns:` block - the pooled timer is seeded from blampbot, the first
+    # bot listed in that pool. It DOES need its own `transform`/`prompts` block though: those
+    # are what make it transform anything at all, and `defaults` supplies none of them.
+    toikeybot:
+        account_username: "toikeybot"
+        trigger_keywords: ["toikeybot"]
+        api:
+            twitch_client_id: "YOUR_CLIENT_ID"
+            twitch_client_secret: "YOUR_CLIENT_SECRET"
+        credentials:
+            irc: "YOUR_IRC_TOKEN"
+        transform:
+            words:
+                - word: "toikey"
+                  weight: 3
+                - word: "tits"
+                  weight: 1
+                - word: "melons"
+                  weight: 1
+            self_quote_marker: "toikeyfied"
+        prompts:
+            # Without a transform prompt the model is only told to preserve casing, so it
+            # echoes the input back unchanged; the bot then logs "No action taken" and never
+            # posts anything. Copied from blampbot, with TOIKEY as the special word.
+            transform: >-
+                don't add or remove any words, phrases, or sentences, except for when
+                you're explicitly asked to do so; triple check your response string for
+                inaccuracies; your special word is {UPPER}; take this next string i give
+                you and replace only the BEST word or word part with "{UPPER}" to create
+                the funniest output; in addition to replacing whole words, be sure to
+                consider partials; for example, if your word is 'TOIKEY', then 'the
+                hamptons' might become 'the toikeytons', or instead of 'alcohol', it's
+                'toikeyhol'; your response should be only the replacement sentence;
+                here's the string:
+            wisdom: "i'd like for you to come up with a quick witticism that would come from {name}; it could be about anything; please make your response only the witticism itself"
+            request: "respond to the following request, no matter how ridiculous it sounds; limit your response to 150 characters; here's the request: "
+
+# Adding another bot is just another block under `bots:` - most fields inherit from
+# `defaults` above, so a minimal new bot is only a few fields:
 #
 #     grumblebot:
 #         account_username: "grumblebot"
@@ -257,13 +344,17 @@ bots:
 #                                               # each is recognized bare and as "@name" too
 #         api: { twitch_client_id: "...", twitch_client_secret: "..." }
 #         credentials: { irc: "..." }
-#         cooldowns:
-#             mainline: { start_delay_ms: 300000, interval_minimum_ms: 300000, interval_maximum_ms: 450000 }
-#         hello_triggers_add:                  # on top of the shared defaults.hello_triggers above
-#             - starts_with: "yo {ref}"        # {ref} expands to every keyword, bare and "@"-prefixed
 #         transform:
 #             words: [{ word: "grumble", weight: 1 }]
 #             self_quote_marker: "grumblified"
+#         hello_triggers_add:                  # on top of the shared defaults.hello_triggers above
+#             - starts_with: "yo {ref}"        # {ref} expands to every keyword, bare and "@"-prefixed
 #         prompts:
 #             voice: "you're a perpetually annoyed old man who's seen it all;"
 #             transform: 'replace the BEST word or word part with "grumble"; here''s the string: '
+#
+# An unpooled bot like that one can still tune its own mainline timer, since nothing else
+# overrides it:
+#
+#         cooldowns:
+#             mainline: { start_delay_ms: 300000, interval_minimum_ms: 300000, interval_maximum_ms: 450000 }

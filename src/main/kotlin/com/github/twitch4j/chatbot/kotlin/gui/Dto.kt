@@ -11,8 +11,11 @@ import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownStatus
 import com.github.twitch4j.chatbot.kotlin.core.LogSegment
 import com.github.twitch4j.chatbot.kotlin.core.PersistedActivityEvent
+import com.github.twitch4j.chatbot.kotlin.core.ModelReplayRun
 import com.github.twitch4j.chatbot.kotlin.core.QualityReport
 import com.github.twitch4j.chatbot.kotlin.core.ReactionDetail
+import com.github.twitch4j.chatbot.kotlin.core.ReplayCandidate
+import com.github.twitch4j.chatbot.kotlin.core.ReplayResult
 import com.github.twitch4j.chatbot.kotlin.core.ScoredResponse
 import kotlinx.serialization.Serializable
 
@@ -347,3 +350,45 @@ fun QualityReport.toDto() = QualityReportDto(
     worstResponses = worstResponses.map { it.toDto() },
     recommendation = recommendation,
 )
+
+@Serializable
+data class ModelsDto(val available: List<String>, val selected: String?)
+
+@Serializable
+data class SelectedModelDto(val key: String)
+
+@Serializable
+data class ReplayCandidateDto(
+    val botKey: String,
+    val timestampMs: Long,
+    val sourceMessage: String,
+    val prompt: String,
+    val originalResponse: String,
+)
+
+fun ReplayCandidate.toDto() = ReplayCandidateDto(
+    botKey = botKey,
+    timestampMs = timestampMs,
+    sourceMessage = sourceMessage,
+    prompt = prompt,
+    originalResponse = originalResponse,
+)
+
+@Serializable
+data class ModelReplayRunDto(val modelKey: String, val runIndex: Int, val response: String, val durationMs: Long, val errorMessage: String? = null)
+
+fun ModelReplayRun.toDto() = ModelReplayRunDto(modelKey = modelKey, runIndex = runIndex, response = response, durationMs = durationMs, errorMessage = errorMessage)
+
+@Serializable
+data class ReplayResultDto(val candidate: ReplayCandidateDto, val runs: List<ModelReplayRunDto>)
+
+fun ReplayResult.toDto() = ReplayResultDto(candidate = candidate.toDto(), runs = runs.map { it.toDto() })
+
+@Serializable
+data class ReplayRunRequestDto(val botKey: String, val days: Int = 7, val limit: Int = 20, val runsPerModel: Int = 3)
+
+@Serializable
+data class RecentMainlineTargetsDto(val limit: Int, val recent: List<String>)
+
+@Serializable
+data class RecentMainlineTargetLimitDto(val limit: Int)

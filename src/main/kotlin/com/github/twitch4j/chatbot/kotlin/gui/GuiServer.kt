@@ -187,6 +187,42 @@ fun Application.guiModule(admin: AdminController) {
                 if (report == null) call.respond(HttpStatusCode.ServiceUnavailable) else call.respond(report.toDto())
             }
 
+            get("/models") {
+                call.respond(ModelsDto(available = admin.listModels(), selected = admin.selectedModel()))
+            }
+
+            post("/model") {
+                val body = call.receive<SelectedModelDto>()
+                respondOk(admin.setSelectedModel(body.key))
+            }
+
+            get("/replay/candidates") {
+                val botKey = call.request.queryParameters["botKey"]
+                val days = call.request.queryParameters["days"]?.toIntOrNull() ?: 7
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
+                if (botKey == null) {
+                    call.respond(HttpStatusCode.BadRequest)
+                    return@get
+                }
+                val candidates = admin.replayCandidates(botKey, days, limit)
+                if (candidates == null) call.respond(HttpStatusCode.ServiceUnavailable) else call.respond(candidates.map { it.toDto() })
+            }
+
+            post("/replay/run") {
+                val body = call.receive<ReplayRunRequestDto>()
+                val results = admin.runReplay(body.botKey, body.days, body.limit, body.runsPerModel)
+                if (results == null) call.respond(HttpStatusCode.ServiceUnavailable) else call.respond(results.map { it.toDto() })
+            }
+
+            get("/recent-targets") {
+                call.respond(RecentMainlineTargetsDto(limit = admin.recentMainlineTargetLimit(), recent = admin.recentMainlineTargets()))
+            }
+
+            post("/recent-targets/limit") {
+                val body = call.receive<RecentMainlineTargetLimitDto>()
+                respondOk(admin.setRecentMainlineTargetLimit(body.limit))
+            }
+
             route("/bots/{botKey}") {
                 get("/config") {
                     val botKey = call.parameters["botKey"]!!

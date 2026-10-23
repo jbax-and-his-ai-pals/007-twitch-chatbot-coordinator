@@ -9,10 +9,11 @@ import org.junit.jupiter.api.Test
 /**
  * Covers [Messaging]'s [ActivityBus] wiring - the web GUI is the only consumer, there's no
  * console output at all. Every complete "line" - possibly built from several
- * addNewLine=false fragments, as [Cooldowns.printCooldownMessages] does - should reach the
- * bus as one [ActivityEvent.Log] with one [LogSegment] per fragment (level + plain text),
- * so the GUI can color each fragment independently instead of flattening a multi-color line
- * into one color.
+ * addNewLine=false fragments, as [MessageDispatcher]'s cooldown summary does - should reach
+ * the bus as one [ActivityEvent.Log] with one [LogSegment] per fragment (level + plain
+ * text), so the GUI can color each fragment independently instead of flattening a
+ * multi-color line into one color. Also covers per-batch line deduplication - see
+ * [Messaging.beginBatch]'s doc comment.
  */
 class MessagingLogTest {
     @AfterEach
@@ -151,6 +152,23 @@ class MessagingLogTest {
     }
 
     @Test
+    fun `an unfinished fragment left behind by a mid-line exception does not leak into the next batch`() {
+        // Simulates the shape of a real crash: an addNewLine=false fragment that never got
+        // its terminating call (e.g. an exception thrown between the two), so pendingLine
+        // is left dirty on this thread going into the next dispatch entirely.
+        Messaging.info("stale, never-completed fragment", addNewLine = false)
+
+        val logs = published {
+            Messaging.beginBatch()
+            Messaging.info("a clean line")
+            Messaging.endBatch()
+        }
+
+        assertEquals(1, logs.size)
+        assertFalse(logs.single().fullText().contains("stale"))
+    }
+
+    @Test
     fun `endBatch with nothing collected publishes no event`() {
         val logs = published {
             Messaging.beginBatch()
@@ -165,6 +183,59 @@ class MessagingLogTest {
         val logs = published { Messaging.endBatch() }
 
         assertTrue(logs.isEmpty())
+    }
+
+    @Test
+    fun `an identical line published twice within one batch is collapsed to a single occurrence`() {
+        // Mirrors what several bots sharing common excluded-users/forbidden-words actually
+        // produce: the exact same eligibility diagnostic, once per bot, for one message.
+        val logs = published {
+            Messaging.beginBatch()
+            Messaging.error("MESSAGE IS FROM EXCLUDED USER - nightbot")
+            Messaging.error("MESSAGE IS FROM EXCLUDED USER - nightbot")
+            Messaging.error("MESSAGE IS FROM EXCLUDED USER - nightbot")
+            Messaging.endBatch()
+        }
+
+        assertEquals(1, logs.size)
+        assertEquals(1, logs.single().segments.size)
+    }
+
+    @Test
+    fun `same text but a different level is NOT treated as a duplicate`() {
+        val logs = published {
+            Messaging.beginBatch()
+            Messaging.error("same wording")
+            Messaging.info("same wording")
+            Messaging.endBatch()
+        }
+
+        assertEquals(2, logs.single().segments.size)
+    }
+
+    @Test
+    fun `dedup only applies within one batch - the same line in a later batch publishes again`() {
+        val logs = published {
+            Messaging.beginBatch()
+            Messaging.error("repeatable line")
+            Messaging.endBatch()
+
+            Messaging.beginBatch()
+            Messaging.error("repeatable line")
+            Messaging.endBatch()
+        }
+
+        assertEquals(2, logs.size)
+    }
+
+    @Test
+    fun `dedup never applies outside a batch - identical immediate lines both publish`() {
+        val logs = published {
+            Messaging.error("repeated outside a batch")
+            Messaging.error("repeated outside a batch")
+        }
+
+        assertEquals(2, logs.size)
     }
 
     @Test

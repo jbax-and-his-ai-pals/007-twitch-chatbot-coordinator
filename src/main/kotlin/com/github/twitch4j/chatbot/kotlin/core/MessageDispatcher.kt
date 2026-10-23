@@ -28,6 +28,7 @@ object MessageDispatcher {
     ) {
         val processed = ProcessedEvent.fromEvent(event)
         processed.printSharedStatus()
+        printCooldownSummary(personalities)
 
         val secondaryActions = mutableMapOf<Personality, () -> Unit>()
         val mainlineCandidates = mutableListOf<Personality>()
@@ -47,6 +48,46 @@ object MessageDispatcher {
         when (val winner = pickActor(candidates)) {
             null -> Unit
             else -> secondaryActions[winner]?.invoke() ?: winner.actMainline(event)
+        }
+    }
+
+    /**
+     * One condensed pair of lines covering EVERY personality's cooldown status, instead of
+     * the old one-full-line-per-bot output - with several bots configured that added up
+     * fast, and pooled bots (sharing one [MainlinePool] timer) used to print the identical
+     * mainline status once per pool member. "MAINLINE" groups personalities sharing a pool
+     * into a single fragment (e.g. "BLAMPBOT/TOIKEYBOT"); "OTHER" lists every bot's own
+     * wisdom/request/retry/callout status, since those always stay independent per bot even
+     * when mainline is pooled.
+     */
+    private fun printCooldownSummary(personalities: List<Personality>) {
+        if (personalities.isEmpty()) return
+
+        Messaging.info("MAINLINE: ", addNewLine = false)
+        val mainlineGroups = personalities.groupBy { (it.mainlinePool as Any?) ?: it }.values.toList()
+        mainlineGroups.forEachIndexed { index, group ->
+            val label = group.joinToString("/") { it.name.uppercase() }
+            printCooldownFragment(label, group.first().cooldownSnapshot().mainline, leadingSpace = index > 0, terminate = index == mainlineGroups.lastIndex)
+        }
+
+        Messaging.info("OTHER: ", addNewLine = false)
+        personalities.forEachIndexed { index, personality ->
+            val snapshot = personality.cooldownSnapshot()
+            Messaging.cyan("${if (index > 0) "  " else ""}${personality.name.uppercase()} ", addNewLine = false)
+            printCooldownFragment("WISDOM", snapshot.wisdom, leadingSpace = false, terminate = false)
+            printCooldownFragment("REQUEST", snapshot.request, leadingSpace = true, terminate = false)
+            printCooldownFragment("RETRY", snapshot.retry, leadingSpace = true, terminate = false)
+            printCooldownFragment("CALLOUT", snapshot.callout, leadingSpace = true, terminate = index == personalities.lastIndex)
+        }
+    }
+
+    /** One "[LABEL]" (ready, green) or "[LABEL (Xs)]" (still cooling down, yellow) fragment - [terminate] ends the whole logical line, same as [Cooldowns]' own print methods used to. */
+    private fun printCooldownFragment(label: String, status: CooldownStatus, leadingSpace: Boolean, terminate: Boolean) {
+        val prefix = if (leadingSpace) " " else ""
+        if (status.ready) {
+            Messaging.green("$prefix[$label]", addNewLine = terminate)
+        } else {
+            Messaging.yellowBold("$prefix[$label (${status.remainingMs / 1000.0}s)]", addNewLine = terminate)
         }
     }
 }

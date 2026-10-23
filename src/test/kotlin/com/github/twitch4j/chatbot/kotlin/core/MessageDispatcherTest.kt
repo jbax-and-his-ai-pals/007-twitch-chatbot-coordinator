@@ -5,6 +5,7 @@ import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
 import com.github.twitch4j.common.events.domain.EventUser
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -14,11 +15,11 @@ import org.junit.jupiter.api.Test
 private class FakePersonality(
     override val name: String,
     private val intent: PersonalityIntent,
+    override val mainlinePool: MainlinePool? = null,
 ) : Personality {
     override val client: ITwitchClient get() = throw UnsupportedOperationException("not needed")
     override val channel = "test"
     override val definition = testBotDefinition(key = name)
-    override val mainlinePool: MainlinePool? = null
     override var minimumMessagesBetween: Int = 0
     var mainlineActed = false
         private set
@@ -28,19 +29,46 @@ private class FakePersonality(
         mainlineActed = true
     }
 
-    override fun cooldownSnapshot() = throw UnsupportedOperationException("not needed")
+    // Real now: MessageDispatcher.printCooldownSummary reads every personality's snapshot
+    // once per dispatch, to print its condensed two-line summary - see that doc comment.
+    // Mirrors ConfiguredPersonality.cooldownSnapshot: mainline comes from the pool when set.
+    private val readyStatus = CooldownStatus(remainingMs = 0, ready = true, configuredMs = 0)
+    override fun cooldownSnapshot() = CooldownSnapshot(
+        label = name.uppercase(),
+        mainline = mainlinePool?.mainlineStatus() ?: readyStatus,
+        mainlineIntervalMinimumMs = 0,
+        mainlineIntervalMaximumMs = 0,
+        wisdom = readyStatus,
+        callout = readyStatus,
+        retry = readyStatus,
+        request = readyStatus,
+    )
     override fun adminCooldown(type: CooldownType, action: CooldownAdminAction) = Unit
     override fun setCooldownConfig(type: CooldownType, ms: Long) = Unit
     override fun setMainlineIntervalBounds(minMs: Long, maxMs: Long) = Unit
 }
 
 class MessageDispatcherTest {
+    @AfterEach
+    fun resetBus() {
+        Messaging.bus = null
+    }
+
     private fun event(message: String = "just a normal message here"): ChannelMessageEvent {
         val event = mockk<ChannelMessageEvent>(relaxed = true)
         every { event.message } returns message
         every { event.user } returns EventUser("1", "someviewer")
         return event
     }
+
+    private fun published(block: () -> Unit): List<ActivityEvent.Log> {
+        val bus = ActivityBus()
+        Messaging.bus = bus
+        block()
+        return bus.recent().filterIsInstance<ActivityEvent.Log>()
+    }
+
+    private fun ActivityEvent.Log.fullText() = segments.joinToString("") { it.text }
 
     @Test
     fun `a lone secondary candidate fires its action`() {
@@ -154,5 +182,51 @@ class MessageDispatcherTest {
 
         assertFalse(aFired)
         assertFalse(bFired)
+    }
+
+    // ---- Cooldown summary --------------------------------------------------------------
+
+    @Test
+    fun `dispatch prints exactly two cooldown-summary lines, regardless of how many bots are configured`() {
+        val a = FakePersonality("a", PersonalityIntent.None)
+        val b = FakePersonality("b", PersonalityIntent.None)
+        val c = FakePersonality("c", PersonalityIntent.None)
+
+        val logs = published { MessageDispatcher.dispatch(listOf(a, b, c), event(), pickActor = { null }) }
+
+        val cooldownLines = logs.filter { it.fullText().contains("MAINLINE:") || it.fullText().contains("OTHER:") }
+        assertEquals(2, cooldownLines.size)
+        assertTrue(cooldownLines.any { it.fullText().contains("MAINLINE:") })
+        assertTrue(cooldownLines.any { it.fullText().contains("OTHER:") })
+    }
+
+    @Test
+    fun `the OTHER line names every bot once`() {
+        val a = FakePersonality("a", PersonalityIntent.None)
+        val b = FakePersonality("b", PersonalityIntent.None)
+
+        val logs = published { MessageDispatcher.dispatch(listOf(a, b), event(), pickActor = { null }) }
+
+        val otherLine = logs.single { it.fullText().contains("OTHER:") }.fullText()
+        assertTrue(otherLine.contains("A"))
+        assertTrue(otherLine.contains("B"))
+    }
+
+    @Test
+    fun `bots sharing a MainlinePool print their combined mainline status once, not once per member`() {
+        val pool = MainlinePool(label = "POOL", mainlineConfig = MainlineCooldownConfig(startInstantly = true))
+        val a = FakePersonality("a", PersonalityIntent.None, mainlinePool = pool)
+        val b = FakePersonality("b", PersonalityIntent.None, mainlinePool = pool)
+        val c = FakePersonality("c", PersonalityIntent.None) // unpooled, own independent timer
+
+        val logs = published { MessageDispatcher.dispatch(listOf(a, b, c), event(), pickActor = { null }) }
+
+        val mainlineLine = logs.single { it.fullText().contains("MAINLINE:") }.fullText()
+        // The pool's combined fragment appears once, labeled by both members joined together -
+        // not "A" and "B" as two separate bracketed fragments.
+        assertTrue(mainlineLine.contains("[A/B]"))
+        assertFalse(mainlineLine.contains("[A]"))
+        assertFalse(mainlineLine.contains("[B]"))
+        assertTrue(mainlineLine.contains("[C]"))
     }
 }

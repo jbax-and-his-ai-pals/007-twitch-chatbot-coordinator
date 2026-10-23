@@ -25,6 +25,10 @@ data class Configuration(
     val mainlinePool: List<String> = listOf(),
     /** Port the embedded GUI control panel listens on (http://localhost:PORT). */
     val guiPort: Int = 8080,
+    /** Every LLM the GUI's model-selection dropdown can switch to - see [ModelsConfig]. */
+    val models: ModelsConfig = ModelsConfig(),
+    /** How many of the most recently mainline-transformed chatters, shared across EVERY bot, no bot may target again - see [RecentMainlineTargets]. */
+    val recentMainlineTargetLimit: Int = 3,
 ) {
     companion object {
         /** Load the configuration from the config.yaml file */

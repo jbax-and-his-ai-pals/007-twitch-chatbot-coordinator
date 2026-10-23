@@ -65,6 +65,16 @@ body {
 }
 #mockLabel.real { color: var(--red); }
 
+.model-select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.model-select:focus { outline: none; border-color: var(--accent); }
+
 .switch {
   position: relative;
   display: inline-block;
@@ -1101,3 +1111,21 @@ body {
 .quality-tag-negative { background: rgba(248,113,113,0.15); color: var(--red); }
 .quality-tag-neutral { background: rgba(154,160,176,0.15); color: var(--text-dim); }
 #editModalSave:hover { opacity: 0.9; }
+
+.replay-controls { flex-wrap: wrap; }
+.quality-days-label select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.replay-preview, .replay-results { display: flex; flex-direction: column; gap: 10px; }
+
+.replay-models-results { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.replay-model-section { border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; }
+.replay-model-name { font-weight: 700; color: var(--accent); font-size: 12px; margin-bottom: 4px; }
+.replay-run { font-size: 12px; overflow-wrap: anywhere; margin-bottom: 3px; }
+.replay-run-error { color: var(--red); font-style: italic; }

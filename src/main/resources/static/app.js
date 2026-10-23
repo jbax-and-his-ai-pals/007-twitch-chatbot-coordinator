@@ -3,6 +3,7 @@ const botCardsEl = document.getElementById("botCards");
 const botsPanelEl = document.getElementById("botsPanel");
 const mockSwitch = document.getElementById("mockSwitch");
 const mockLabel = document.getElementById("mockLabel");
+const modelSelect = document.getElementById("modelSelect");
 const connStatus = document.getElementById("connStatus");
 const filterChat = document.getElementById("filterChat");
 const filterBot = document.getElementById("filterBot");
@@ -884,7 +885,27 @@ async function refreshCommonConfigPanel() {
   if (!container) return;
   const config = await api("/common-config");
   container.innerHTML = commonConfigSectionHtml(config);
+  await refreshRecentTargets();
 }
+
+async function refreshRecentTargets() {
+  const limitInput = document.getElementById("recentTargetsLimit");
+  const listEl = document.getElementById("recentTargetsList");
+  if (!limitInput || !listEl) return;
+
+  const { limit, recent } = await api("/recent-targets");
+  limitInput.value = limit;
+  limitInput.dataset.saved = limit;
+  listEl.innerHTML = recent.length
+    ? recent.map((user) => `<span class="chip" style="--chip-hue:${hashHue(user)}">${escapeHtml(user)}</span>`).join("")
+    : `<span class="config-empty">none right now</span>`;
+}
+
+document.getElementById("recentTargetsLimit").addEventListener("focusout", async (e) => {
+  const el = e.target;
+  await autosaveSingle(el, "/recent-targets/limit", (limit) => ({ limit }));
+  await refreshRecentTargets();
+});
 
 /** A single editable string (self-quote marker, or one of the four prompt fields) - click to open the edit modal. */
 function editableTextBlockHtml(botKey, title, endpoint, value, isLong) {
@@ -1282,6 +1303,20 @@ mockSwitch.addEventListener("change", async () => {
   await loadMockMode();
 });
 
+async function loadModels() {
+  const { available, selected } = await api("/models");
+  if (!available.length) {
+    modelSelect.style.display = "none";
+    return;
+  }
+  modelSelect.innerHTML = available.map((key) => `<option value="${escapeHtml(key)}">${escapeHtml(key)}</option>`).join("");
+  modelSelect.value = selected;
+}
+
+modelSelect.addEventListener("change", async () => {
+  await api("/model", { method: "POST", body: JSON.stringify({ key: modelSelect.value }) });
+});
+
 async function loadOverrides() {
   const overrides = await api("/mock/overrides");
   overridesListEl.innerHTML = "";
@@ -1312,7 +1347,7 @@ document.getElementById("addOverride").addEventListener("click", async () => {
 });
 
 async function init() {
-  await Promise.all([loadBots(), loadInitialFeed(), loadMockMode(), loadOverrides(), refreshCommonConfigPanel(), populateHistoryDates()]);
+  await Promise.all([loadBots(), loadInitialFeed(), loadMockMode(), loadModels(), loadOverrides(), refreshCommonConfigPanel(), populateHistoryDates()]);
   // loadBots and loadInitialFeed race independently, so re-sync recent-message cards once
   // both have definitely finished, in case events arrived before their bot's card existed.
   bots.forEach((bot) => renderRecentMessages(bot.key));
