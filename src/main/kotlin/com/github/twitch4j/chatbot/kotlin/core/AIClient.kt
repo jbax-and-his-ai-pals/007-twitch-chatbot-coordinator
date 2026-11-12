@@ -8,3 +8,6 @@ package com.github.twitch4j.chatbot.kotlin.core
 fun interface AIClient {
     fun generateContent(prompt: String): String
 }
+
+/** A model call that ran out of time. Distinct so [SwitchableAIClient] can engage fallback at once instead of waiting out more multi-minute failures on the single event thread. */
+class ModelTimeoutException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)

@@ -133,7 +133,8 @@ fun Application.guiModule(admin: AdminController) {
             }
 
             get("/mock") {
-                call.respond(MockModeDto(admin.isMockMode()))
+                val status = admin.fallbackStatus()
+                call.respond(MockModeDto(status.manual, status.automaticReason != null, status.automaticReason, status.automaticSinceMs))
             }
 
             post("/mock") {

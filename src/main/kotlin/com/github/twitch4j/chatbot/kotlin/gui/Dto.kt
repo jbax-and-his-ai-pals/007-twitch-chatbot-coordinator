@@ -161,7 +161,14 @@ data class SendRequestDto(val botKey: String, val message: String)
 data class TestMessageDto(val botKey: String, val message: String, val channel: String)
 
 @Serializable
-data class MockModeDto(val enabled: Boolean)
+data class MockModeDto(
+    /** The manual fallback switch. */
+    val enabled: Boolean,
+    /** True while the app has engaged fallback itself because the real model failed. */
+    val automatic: Boolean = false,
+    val reason: String? = null,
+    val sinceMs: Long? = null,
+)
 
 @Serializable
 data class SetRemainingDto(val remainingMs: Long)

@@ -12,29 +12,27 @@ channels:
     - "thecheeseball81"
     - "jerbtrundles"
 
-# Every LLM the GUI's model dropdown can switch real (non-mocked) calls to. "default" is
-# what a fresh run starts on; switching in the GUI is session-only, never persisted (same as
-# mock mode) - a restart always comes back up on this default. Two providers:
-#   - "vertex": the real, billed Vertex AI/Gemini client - there's only one of these, so
-#     "key" here is just a label; "model_name" is ignored.
-#   - "ollama": a model served by a locally-running Ollama (https://ollama.com) instance, for
-#     free offline response-quality testing (e.g. `ollama pull gemma3`, `ollama pull
-#     phi4-mini`, then `ollama serve`). "model_name" is what `ollama list` shows for it -
-#     defaults to "key" itself if omitted.
-# Local models are entirely optional - delete every "ollama" entry below (keeping just
-# "gemini") if you haven't set up Ollama, and nothing else changes.
+# Every LLM the GUI's model dropdown can switch real (non-mocked) calls to. "default" is what a
+# fresh run starts on; switching in the GUI is session-only, never persisted (same as fallback
+# mode) - a restart always comes back up on this default. Two providers:
+#   - "ollama": a model served by a locally-running Ollama (https://ollama.com) instance - free
+#     and offline. `ollama pull gemma4:12b` (about 8 GB, fits a 16 GB GPU), keep Ollama
+#     running, and "model_name" is whatever `ollama list` shows (defaults to "key" if omitted).
+#     gemma4:12b won a head-to-head against six other local models on this app's own logged
+#     chats: it passed production's transform checks 95% of the time, vs 90% for the
+#     gemini-2.5-flash-lite responses it replaces (the others managed 57-68%).
+#   - "vertex": the billed Vertex AI/Gemini client (project and model are hardcoded in
+#     core/AIModel.kt). Opt-in only - nothing falls back to it. Uncomment the entry below to
+#     offer it in the dropdown.
 models:
     ollama_base_url: "http://localhost:11434"
-    default: "gemini"
+    default: "gemma4-12b"
     available:
-        - key: "gemini"
-          provider: "vertex"
-        - key: "gemma3"
+        - key: "gemma4-12b"
           provider: "ollama"
-          model_name: "gemma3:4b"
-        - key: "phi4-mini"
-          provider: "ollama"
-          model_name: "phi4-mini"
+          model_name: "gemma4:12b"
+        # - key: "gemini"
+        #   provider: "vertex"
 
 # Bots that share ONE ambient mainline-transform timer instead of each running its own -
 # only one of them acts per interval, chosen at random when several are eligible for the
@@ -149,6 +147,11 @@ defaults:
 
     cooldowns:
         wisdom_ms: 30000
+        # callout_ms is ONE window shared by every bot, not a per-bot timer: at most one callout
+        # ("TURKEY!") is answered per window across the whole group, and the right to answer
+        # rotates round-robin through the bots in `bots:` order. A callout inside the window is
+        # swallowed (including another bot echoing the first one's reply). Editing it per bot in
+        # the GUI edits the same shared value.
         callout_ms: 30000
         retry_ms: 0
         request_ms: 30000
@@ -203,6 +206,9 @@ bots:
                 - word: "melons"
                   weight: 1
             self_quote_marker: "blampfied"
+            # Skip sincere/sad/heavy lines (hospital, grief, politics...) before any model call. On by default;
+            # set false to restore the old behaviour. Old prompt text is in docs/legacy-prompts.md.
+            # sincere_gate: true
 
         moods:
             - name: "default"
@@ -212,15 +218,32 @@ bots:
         prompts:
             voice: "you're basically tony soprano, a stereotypical italian-american new yorker with the accent and attitude;"
             transform: >-
-                don't add or remove any words, phrases, or sentences, except for when
-                you're explicitly asked to do so; triple check your response string for
-                inaccuracies; your special word is {UPPER}; take this next string i give
-                you and replace only the BEST word or word part with "{UPPER}" to create
-                the funniest output; in addition to replacing whole words, be sure to
-                consider partials; for example, if your word is 'BLAMP', then 'the
-                hamptons' might become 'the blamptons', or instead of 'alcohol', it's
-                'blampohol'; your response should be only the replacement sentence;
-                here's the string:
+                your job is to edit one chat message by REPLACING a word, or a piece of a word, with
+                "{UPPER}" - a find-and-replace like the original twitch buttsbot, never an insertion.
+                rules: (1) the edited message must have exactly the same number of words as the
+                original, in the same order, and every word except the one you edit stays exactly as
+                written; (2) replace ONE whole word, or ONE piece of a word, with "{UPPER}" (for a very
+                long message you may do two); the replaced text must disappear - never add "{UPPER}" as
+                an extra word, never put it next to the word it should replace, and never glue it onto a
+                word without removing letters from that word; (3) pick the swap that is funniest:
+                usually a plain noun, verb or adjective, ideally one whose sound or spelling invites a
+                pun (for example 'the hamptons' becomes 'the {lower}tons', 'calculation' becomes
+                'calcu{lower}', 'hate' becomes '{lower}'), and the sentence must still read like
+                grammatical english with "{UPPER}" playing the same role as the word it replaced; (4)
+                never edit names, usernames, @mentions, links, emotes or numbers; (5) keep it safe for a
+                family-friendly chat: if the message is about death, illness, injury, grief, tragedy,
+                politics, religion, self-harm, children, or anyone's looks or identity, or if the swap
+                would insult a person, reply with the original message completely unchanged; (6) reply
+                with only the edited message - no quotes and no explanation; examples of correct edits
+                (your word here is {UPPER}): 'that was a rollercoaster' becomes 'that was a
+                {lower}coaster'; 'i love this song so much' becomes 'i love this {lower} so much'; 'the
+                boss fight was brutal' becomes 'the {lower} fight was brutal'; 'we should take a
+                vacation' becomes 'we should take a vaca{lower}'; 'what time does the stream start'
+                becomes 'what time does the {lower} start'; 'that jump was impossible to hit' becomes
+                'that {lower} was impossible to hit'; examples where you must change nothing and reply
+                with the message exactly as given: 'my grandmother passed away last night' stays 'my
+                grandmother passed away last night'; 'this election will ruin the country' stays 'this
+                election will ruin the country'; here's the string:
             wisdom: "i'd like for you to come up with a quick witticism that would come from {name}; it could be about anything; please make your response only the witticism itself"
             request: "respond to the following request, no matter how ridiculous it sounds; limit your response to 150 characters; here's the request: "
 
@@ -275,18 +298,32 @@ bots:
         prompts:
             voice: ""
             transform: >-
-                don't add any new words, phrases, or sentences to the sentence, except if
-                you're replacing a word with "butt"; don't remove any words from the
-                sentence, except if you're replacing that word with "butt" per further
-                instructions; don't prepend a word with butt; don't add butt as a suffix;
-                you're replacing some of the word; take the string i give you and replace
-                only the BEST word or word part with "butt" to create the funniest
-                output; if the string is exceptionally long, you can replace two words or
-                word parts; we're going for real toilet humor here; in addition to
-                replacing whole words, be sure to consider partials; for example,
-                'calculation' might become 'calcubutt', or instead of 'alcohol', it's
-                'alcobutt' or maybe 'buttohol'; your response should be only the
-                buttified sentence; here's the string:
+                your job is to edit one chat message by REPLACING a word, or a piece of a word, with
+                "{UPPER}" - a find-and-replace like the original twitch buttsbot, never an insertion.
+                rules: (1) the edited message must have exactly the same number of words as the
+                original, in the same order, and every word except the one you edit stays exactly as
+                written; (2) replace ONE whole word, or ONE piece of a word, with "{UPPER}" (for a very
+                long message you may do two); the replaced text must disappear - never add "{UPPER}" as
+                an extra word, never put it next to the word it should replace, and never glue it onto a
+                word without removing letters from that word; (3) pick the swap that is funniest:
+                usually a plain noun, verb or adjective, ideally one whose sound or spelling invites a
+                pun (for example 'the hamptons' becomes 'the {lower}tons', 'calculation' becomes
+                'calcu{lower}', 'hate' becomes '{lower}'), and the sentence must still read like
+                grammatical english with "{UPPER}" playing the same role as the word it replaced; (4)
+                never edit names, usernames, @mentions, links, emotes or numbers; (5) keep it safe for a
+                family-friendly chat: if the message is about death, illness, injury, grief, tragedy,
+                politics, religion, self-harm, children, or anyone's looks or identity, or if the swap
+                would insult a person, reply with the original message completely unchanged; (6) reply
+                with only the edited message - no quotes and no explanation; examples of correct edits
+                (your word here is {UPPER}): 'that was a rollercoaster' becomes 'that was a
+                {lower}coaster'; 'i love this song so much' becomes 'i love this {lower} so much'; 'the
+                boss fight was brutal' becomes 'the {lower} fight was brutal'; 'we should take a
+                vacation' becomes 'we should take a vaca{lower}'; 'what time does the stream start'
+                becomes 'what time does the {lower} start'; 'that jump was impossible to hit' becomes
+                'that {lower} was impossible to hit'; examples where you must change nothing and reply
+                with the message exactly as given: 'my grandmother passed away last night' stays 'my
+                grandmother passed away last night'; 'this election will ruin the country' stays 'this
+                election will ruin the country'; here's the string:
             wisdom: "i'd like for you to come up with a quick witticism that would come from {name}; it could be about anything; please make your response only the witticism itself"
             request: "respond to the following request, no matter how ridiculous it sounds; limit your response to 150 characters; here's the request: "
 
@@ -317,21 +354,65 @@ bots:
                 - word: "melons"
                   weight: 1
             self_quote_marker: "toikeyfied"
+            # Also accept an edit that only turns one word's ur/er/ir/or sound into oi (word -> woid) without the theme word.
+            sound_swap: true
+            # How often a word is oi-swapped by rule (no model call) when the message has an ur/er/ir/or word; otherwise the model picks a theme-word swap.
+            sound_swap_chance: 0.5
+
+        # Brooklyn to blampbot's Jersey: where blampbot is a quiet, menacing mob boss, toikeybot is
+        # the warm, chatty, unsolicited-opinions guy from the old neighborhood. The accent is
+        # deliberately ONE rule - "ur"/"er"/"ir" sounds become "oi" (turkey -> toikey) - and
+        # nothing else (no dese/dem/dose), so requests stay readable and transforms stay valid.
+        hello_triggers_add:
+            - starts_with: "yo {ref}"
+            - starts_with: "yo, {ref}"
+
+        moods:
+            - name: "default"
+              hello_prompt: "[user], an old friend from the neighborhood, has just walked in and greeted you; give them a warm, chatty, over-the-top welcome like you haven't seen them in years; just the response, please"
+        active_mood: "default"
+
         prompts:
+            # Applied to EVERY prompt this bot sends (transform, wisdom, request, hello), after the
+            # shared preamble that carries the no-all-caps / don't-repeat rules. Keep it about
+            # attitude: it also reaches the transform prompt, whose output must stay close to the
+            # original line to pass the similarity check.
+            voice: "you're a warm, chatty, stereotypical brooklyn guy from the old neighborhood, the cheerful opposite of a mob boss: endlessly friendly, a little scatterbrained, full of unsolicited opinions and advice; you speak with a light brooklyn accent where 'ur', 'er' and 'ir' sounds become 'oi' sounds (word is 'woid', bird is 'boid', turkey is 'toikey', first is 'foist') but you never change any other spellings;"
             # Without a transform prompt the model is only told to preserve casing, so it
             # echoes the input back unchanged; the bot then logs "No action taken" and never
             # posts anything. Copied from blampbot, with TOIKEY as the special word.
             transform: >-
-                don't add or remove any words, phrases, or sentences, except for when
-                you're explicitly asked to do so; triple check your response string for
-                inaccuracies; your special word is {UPPER}; take this next string i give
-                you and replace only the BEST word or word part with "{UPPER}" to create
-                the funniest output; in addition to replacing whole words, be sure to
-                consider partials; for example, if your word is 'TOIKEY', then 'the
-                hamptons' might become 'the toikeytons', or instead of 'alcohol', it's
-                'toikeyhol'; your response should be only the replacement sentence;
-                here's the string:
-            wisdom: "i'd like for you to come up with a quick witticism that would come from {name}; it could be about anything; please make your response only the witticism itself"
+                your job is to edit one chat message by REPLACING a word, or a piece of a word, with
+                "{UPPER}" - a find-and-replace like the original twitch buttsbot, never an insertion.
+                rules: (1) the edited message must have exactly the same number of words as the
+                original, in the same order, and every word except the one you edit stays exactly as
+                written; (2) replace ONE whole word, or ONE piece of a word, with "{UPPER}" (for a very
+                long message you may do two); the replaced text must disappear - never add "{UPPER}" as
+                an extra word, never put it next to the word it should replace, and never glue it onto a
+                word without removing letters from that word; you may ALSO make the one edit by turning
+                the ur, er, ir or or sound of a single word into an oi sound instead of using "{UPPER}"
+                ('word' becomes 'woid', 'bird' becomes 'boid', 'turkey' becomes 'toikey', 'that is the
+                worst bird' becomes 'that is the worst boid') - use whichever is funnier, and prefer the
+                oi sound-swap whenever a word has an ur, er, ir or or sound; either way it counts as the
+                one swap; (3) pick the swap that is funniest: usually a plain noun, verb or adjective,
+                ideally one whose sound or spelling invites a pun (for example 'the hamptons' becomes
+                'the {lower}tons', 'calculation' becomes 'calcu{lower}', 'hate' becomes '{lower}'), and
+                the sentence must still read like grammatical english with "{UPPER}" playing the same
+                role as the word it replaced; (4) never edit names, usernames, @mentions, links, emotes
+                or numbers; (5) keep it safe for a family-friendly chat: if the message is about death,
+                illness, injury, grief, tragedy, politics, religion, self-harm, children, or anyone's
+                looks or identity, or if the swap would insult a person, reply with the original message
+                completely unchanged; (6) reply with only the edited message - no quotes and no
+                explanation; examples of correct edits (your word here is {UPPER}): 'that was a
+                rollercoaster' becomes 'that was a {lower}coaster'; 'i love this song so much' becomes
+                'i love this {lower} so much'; 'the boss fight was brutal' becomes 'the {lower} fight
+                was brutal'; 'we should take a vacation' becomes 'we should take a vaca{lower}'; 'what
+                time does the stream start' becomes 'what time does the {lower} start'; 'that jump was
+                impossible to hit' becomes 'that {lower} was impossible to hit'; examples where you must
+                change nothing and reply with the message exactly as given: 'my grandmother passed away
+                last night' stays 'my grandmother passed away last night'; 'this election will ruin the
+                country' stays 'this election will ruin the country'; here's the string:
+            wisdom: "i'd like for you to come up with a quick witticism or a piece of unsolicited neighborhood advice that would come from {name}; it could be about anything; please make your response only the witticism itself"
             request: "respond to the following request, no matter how ridiculous it sounds; limit your response to 150 characters; here's the request: "
 
 # Adding another bot is just another block under `bots:` - most fields inherit from

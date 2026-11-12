@@ -52,15 +52,25 @@ class TransformedMessage private constructor(
             word: String,
             fromLastActedUser: Boolean,
             notEnoughMessages: Boolean,
+            random: kotlin.random.Random = kotlin.random.Random.Default,
         ): TransformedMessage {
-            val transformed = CasingRestorer.restore(original, clean(genericAI.transform(bot, original, word)))
+            val gated = bot.transform.sincereGate && SincereLineGate.matches(original)
+            if (gated) Messaging.error("SINCERE LINE GATE: leaving this message alone, no model call")
+            val oiEdit = if (!gated && bot.transform.soundSwap && random.nextDouble() < bot.transform.soundSwapChance) OiSoundSwap.pick(original, random) else null
+            if (oiEdit != null) Messaging.cyan("	SOUND SWAP (rule-based, no model call): $oiEdit")
+            val transformed = when {
+                gated -> original
+                oiEdit != null -> oiEdit
+                else -> CasingRestorer.restore(original, clean(genericAI.transform(bot, original, word)))
+            }
             val similarityScore = Levenshtein.similarityScore(original, transformed)
             val tooDifferent = similarityScore < bot.similarityThreshold
             val containsEmoji = Phrases.containsEmoji(transformed)
             val containsForbidden = bot.forbiddenWords.any { transformed.lowercase().contains(it) }
             val quotingItself = bot.transform.selfQuoteMarker.isNotBlank() &&
                     transformed.lowercase().contains(bot.transform.selfQuoteMarker.lowercase())
-            val containsWord = transformed.lowercase().contains(word.lowercase())
+            val containsWord = transformed.lowercase().contains(word.lowercase()) ||
+                    (bot.transform.soundSwap && OiSoundSwap.matches(original, transformed))
             val isSame = transformed.lowercase() == original.lowercase()
             val isEmpty = transformed.isEmpty()
             val startsWithExclamation = transformed.startsWith("!")

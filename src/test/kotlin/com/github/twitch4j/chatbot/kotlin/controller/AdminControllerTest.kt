@@ -1350,4 +1350,26 @@ class AdminControllerTest {
         assertFalse(wired.setRecentMainlineTargetLimit(-1))
         assertEquals(1, wired.recentMainlineTargetLimit())
     }
+
+    @Test
+    fun `fallbackStatus reports manual and automatic fallback separately`() {
+        assertEquals(FallbackStatus(manual = true, automaticReason = null, automaticSinceMs = null), admin.fallbackStatus())
+
+        admin.setMockMode(false)
+        mockModeState.recordFailure("m", "down", immediate = true)
+        val status = admin.fallbackStatus()
+        assertFalse(status.manual)
+        assertTrue(status.automaticReason!!.contains("down"))
+        assertTrue(status.automaticSinceMs != null)
+    }
+
+    @Test
+    fun `turning the manual switch off also clears an automatic fallback`() {
+        admin.setMockMode(false)
+        mockModeState.recordFailure("m", "down", immediate = true)
+
+        admin.setMockMode(false)
+
+        assertEquals(null, admin.fallbackStatus().automaticReason)
+    }
 }

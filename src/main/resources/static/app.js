@@ -221,7 +221,7 @@ function buildFeedEntryEl(evt) {
       `<span class="feed-bot">${escapeHtml(evt.botKey)}</span>: ${escapeHtml(evt.message)}`;
   } else if (evt.type === "ai_call") {
     row.innerHTML = `<span class="feed-time">${timeStr(evt.timestampMs)}</span>` +
-      `<span class="feed-tag tag-ai">${evt.mocked ? "MOCK AI" : "REAL AI"}</span>` +
+      `<span class="feed-tag tag-ai">${evt.mocked ? "FALLBACK AI" : "LIVE AI"}</span>` +
       `<span class="feed-bot">${escapeHtml(evt.botKey)}</span>` +
       `<span class="feed-ai-detail">prompt: ${escapeHtml(evt.prompt)}</span>` +
       `<span class="feed-ai-detail">reply: ${escapeHtml(evt.response)}</span>`;
@@ -366,7 +366,7 @@ function renderStats() {
     .map(([bot, count]) => statRowHtml(bot, count)).join("");
 
   const aiRows = (stats.aiMockVsReal.mock || stats.aiMockVsReal.real)
-    ? statRowHtml("mock", stats.aiMockVsReal.mock) + statRowHtml("real", stats.aiMockVsReal.real)
+    ? statRowHtml("fallback", stats.aiMockVsReal.mock) + statRowHtml("live", stats.aiMockVsReal.real)
     : "";
 
   const logRows = Object.entries(stats.logByLevel)
@@ -385,7 +385,7 @@ function renderStats() {
   statsBody.innerHTML = [
     statsSectionHtml("Events by type", countsRows),
     statsSectionHtml("Outgoing per bot", outgoingRows),
-    statsSectionHtml("AI calls: mock vs real", aiRows),
+    statsSectionHtml("AI calls: fallback vs live", aiRows),
     statsSectionHtml("Log entries by level", logRows),
     statsSectionHtml("Top chatters (incoming)", topChatters),
     `<div class="stats-range">${range}</div>`,
@@ -1291,12 +1291,42 @@ async function loadInitialFeed() {
   renderFeed();
 }
 
+const fallbackBanner = document.getElementById("fallbackBanner");
+
 async function loadMockMode() {
-  const { enabled } = await api("/mock");
+  const { enabled, automatic, reason, sinceMs } = await api("/mock");
   mockSwitch.checked = enabled;
-  mockLabel.textContent = enabled ? "MOCK MODE" : "REAL API (COSTS $)";
-  mockLabel.classList.toggle("real", !enabled);
+  mockLabel.classList.toggle("auto", !!automatic);
+  mockLabel.classList.toggle("live", !enabled && !automatic);
+
+  if (automatic) {
+    mockLabel.textContent = "FALLBACK - AUTOMATIC";
+    fallbackBanner.className = "fallback-banner";
+    fallbackBanner.innerHTML =
+      `<strong>Fallback mode was switched on automatically:</strong> ${escapeHtml(reason)}. ` +
+      `Bots are sending canned replies. The model is rechecked every minute and live replies resume on their own ` +
+      `<span class="hint">(since ${new Date(sinceMs).toLocaleTimeString()})</span> <button type="button" id="retryModelBtn">Retry now</button>`;
+    fallbackBanner.style.display = "block";
+  } else if (enabled) {
+    mockLabel.textContent = "FALLBACK MODE (canned replies)";
+    fallbackBanner.className = "fallback-banner manual";
+    fallbackBanner.innerHTML = `<strong>Fallback mode is ON.</strong> Bots are sending canned replies instead of calling the model. Flip the switch off to go live.`;
+    fallbackBanner.style.display = "block";
+  } else {
+    mockLabel.textContent = "LIVE (LOCAL MODEL)";
+    fallbackBanner.style.display = "none";
+  }
 }
+
+// An automatic fallback can start or end at any time, so keep the banner honest without a page reload.
+setInterval(() => loadMockMode().catch(() => {}), 5000);
+
+// "Retry now" = turn manual mode off, which also drops an automatic fallback.
+fallbackBanner.addEventListener("click", async (e) => {
+  if (e.target.id !== "retryModelBtn") return;
+  await api("/mock", { method: "POST", body: JSON.stringify({ enabled: false }) });
+  await loadMockMode();
+});
 
 mockSwitch.addEventListener("change", async () => {
   await api("/mock", { method: "POST", body: JSON.stringify({ enabled: mockSwitch.checked }) });

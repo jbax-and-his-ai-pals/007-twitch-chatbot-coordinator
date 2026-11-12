@@ -6,6 +6,7 @@ import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.BotEligibility
+import com.github.twitch4j.chatbot.kotlin.core.CalloutRotation
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
@@ -48,6 +49,7 @@ class ConfiguredPersonality(
     private val commonConfig: CommonConfig = CommonConfig(),
     override val mainlinePool: MainlinePool? = null,
     private val recentTargets: RecentMainlineTargets = RecentMainlineTargets(),
+    override val calloutRotation: CalloutRotation? = null,
 ) : Personality {
     override val name = bot.key
     override val definition: BotDefinition get() = bot
@@ -121,7 +123,7 @@ class ConfiguredPersonality(
                 eligibility.printStatus(event)
                 PersonalityIntent.None
             }
-            eligibility.containsCallout -> PersonalityIntent.Secondary { doCallout(event, eligibility) }
+            eligibility.containsCallout -> PersonalityIntent.Callout { doCallout(event, eligibility) }
             isNo -> PersonalityIntent.Secondary { beScolded(event) }
             isYes -> PersonalityIntent.Secondary { bePraised(event) }
             isWhy -> PersonalityIntent.Secondary { beWhyd(event) }
@@ -181,8 +183,9 @@ class ConfiguredPersonality(
 
     override fun cooldownSnapshot(): CooldownSnapshot {
         val snapshot = cooldowns.snapshot()
-        val pool = mainlinePool ?: return snapshot
-        return snapshot.copy(
+        val withRotation = calloutRotation?.let { snapshot.copy(callout = it.status()) } ?: snapshot
+        val pool = mainlinePool ?: return withRotation
+        return withRotation.copy(
             mainline = pool.mainlineStatus(),
             mainlineIntervalMinimumMs = pool.intervalMinimumMs,
             mainlineIntervalMaximumMs = pool.intervalMaximumMs,
@@ -190,16 +193,26 @@ class ConfiguredPersonality(
     }
 
     override fun adminCooldown(type: CooldownType, action: CooldownAdminAction) {
-        if (type == CooldownType.MAINLINE && mainlinePool != null) mainlinePool.admin(action) else cooldowns.admin(type, action)
+        when {
+            type == CooldownType.MAINLINE && mainlinePool != null -> mainlinePool.admin(action)
+            type == CooldownType.CALLOUT && calloutRotation != null -> calloutRotation.admin(action)
+            else -> cooldowns.admin(type, action)
+        }
     }
 
-    override fun setCooldownConfig(type: CooldownType, ms: Long) = cooldowns.setIntervalMs(type, ms)
+    override fun setCooldownConfig(type: CooldownType, ms: Long) {
+        if (type == CooldownType.CALLOUT && calloutRotation != null) calloutRotation.setCooldownMs(ms) else cooldowns.setIntervalMs(type, ms)
+    }
 
     override fun setMainlineIntervalBounds(minMs: Long, maxMs: Long) {
         if (mainlinePool != null) mainlinePool.setIntervalBounds(minMs, maxMs) else cooldowns.setMainlineIntervalBounds(minMs, maxMs)
     }
 
     private fun send(targetChannel: String, message: String, manual: Boolean = false, source: ChannelMessageEvent? = null) {
+        if (message.isBlank()) {
+            Messaging.error("Not sending an empty reply")
+            return
+        }
         client.chat.sendMessage(targetChannel, message)
         activityBus.publish(
             ActivityEvent.Outgoing(
@@ -289,12 +302,14 @@ class ConfiguredPersonality(
     }
 
     private fun doCallout(event: ChannelMessageEvent, eligibility: BotEligibility) {
-        if (!cooldowns.isCalloutInCooldown()) {
+        // With a shared rotation, MessageDispatcher has already checked the group window and
+        // chosen this bot's turn - nothing left to gate here except recording the send.
+        if (calloutRotation != null || !cooldowns.isCalloutInCooldown()) {
             eligibility.calloutWordsList.firstOrNull()?.let {
                 val message = bot.calloutResponseOverrides[it] ?: commonConfig.calloutResponseOverrides[it] ?: (it.uppercase() + "!")
                 send(channel, message, source = event)
                 Messaging.callout(message)
-                cooldowns.markCalloutUsed()
+                if (calloutRotation != null) calloutRotation.recordResponse(name) else cooldowns.markCalloutUsed()
             }
         }
     }

@@ -44,14 +44,20 @@ class GenericAI(private val aiClient: AIClient = AIModel) {
     /** The word used in the shared preamble ("don't repeat X over and over") for non-transform prompts. */
     private fun defaultWord(bot: BotDefinition) = bot.transform.words.firstOrNull()?.word ?: bot.primaryKeyword
 
+    /**
+     * Bounded: this runs on the one shared chat event thread, so retrying forever against a
+     * dead model would freeze every bot. If [aiClient] is a [SwitchableAIClient] the automatic
+     * fallback normally steps in well before the cap; this is the backstop. Returns "" on
+     * giving up - callers don't send blank replies.
+     */
     private fun generateWithRetry(prompt: String, label: String): String {
-        while (true) {
+        repeat(MAX_ATTEMPTS) {
             try {
                 val result = aiClient.generateContent(prompt)
                 if (result.isEmpty()) {
                     Messaging.info("EMPTY RESULT.")
                 } else {
-                    Messaging.green("\t$label: $result")
+                    Messaging.green("	$label: $result")
                     return result
                 }
             } catch (e: Exception) {
@@ -59,6 +65,8 @@ class GenericAI(private val aiClient: AIClient = AIModel) {
                 Thread.sleep(1000)
             }
         }
+        Messaging.error("$label: gave up after $MAX_ATTEMPTS attempts - no reply will be sent")
+        return ""
     }
 
     private fun generateOnce(prompt: String): String =
@@ -69,6 +77,10 @@ class GenericAI(private val aiClient: AIClient = AIModel) {
             Thread.sleep(1000)
             ""
         }
+
+    private companion object {
+        const val MAX_ATTEMPTS = 5
+    }
 
     fun transform(bot: BotDefinition, str: String, word: String): String =
         generateOnce(

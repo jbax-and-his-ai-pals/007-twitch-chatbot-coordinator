@@ -5,10 +5,12 @@ import com.github.philippheuer.events4j.simple.SimpleEventHandler
 import com.github.twitch4j.ITwitchClient
 import com.github.twitch4j.TwitchClientBuilder
 import com.github.twitch4j.chat.events.channel.ChannelMessageEvent
+import com.github.twitch4j.chatbot.kotlin.core.AIClient
 import com.github.twitch4j.chatbot.kotlin.core.ActivityBus
 import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.ActivityLog
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
+import com.github.twitch4j.chatbot.kotlin.core.CalloutRotation
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.Configuration
 import com.github.twitch4j.chatbot.kotlin.core.MainlinePool
@@ -18,6 +20,7 @@ import com.github.twitch4j.chatbot.kotlin.core.MockAIClient
 import com.github.twitch4j.chatbot.kotlin.core.MockModeState
 import com.github.twitch4j.chatbot.kotlin.core.ModelReplayEvaluator
 import com.github.twitch4j.chatbot.kotlin.core.ModelRegistry
+import com.github.twitch4j.chatbot.kotlin.core.OllamaAIClient
 import com.github.twitch4j.chatbot.kotlin.core.Personality
 import com.github.twitch4j.chatbot.kotlin.core.RecentMainlineTargets
 import com.github.twitch4j.chatbot.kotlin.core.ResponseQualityAnalyzer
@@ -30,6 +33,7 @@ import com.github.twitch4j.chatbot.kotlin.core.engine.TriggerMatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -77,10 +81,23 @@ class Controller(private val configuration: Configuration) {
     private val modelRegistry = ModelRegistry.from(configuration.models)
     private val selectedModelState = SelectedModelState(modelRegistry.defaultKey)
 
+    // SwitchableAIClient falls back to `real` if the selected model can't be resolved, and its
+    // own default is the billed Vertex client. Nothing here should ever reach that silently, so
+    // the fallback fails loudly instead.
+    private val noModelFallback = AIClient { error("No usable model selected - refusing to fall back to a billed API") }
+
     // Shared across every bot regardless of mainline_pool membership - so the group as a
     // whole spreads mainline transforms across chatters instead of any one person getting
     // hit repeatedly just because a different bot's turn came up. See RecentMainlineTargets.
     private val recentMainlineTargets = RecentMainlineTargets(size = configuration.recentMainlineTargetLimit)
+
+    // One callout window for the whole group (seeded from defaults.cooldowns.callout_ms), with
+    // the turn rotating through bots in config order - see CalloutRotation. Covers every bot,
+    // pooled or not, since callout words come from the shared common config.
+    private val calloutRotation = CalloutRotation(
+        cooldownMs = configuration.defaults.cooldowns.calloutMs,
+        order = definitions.map { it.key },
+    )
 
     // Bots listed under config.yaml's `mainline_pool` rotate through one shared ambient
     // timer instead of each running its own - see MainlinePool's doc comment. Seeded from
@@ -103,13 +120,14 @@ class Controller(private val configuration: Configuration) {
             genericAI = GenericAI(
                 SwitchableAIClient(
                     botKey = def.key, state = mockModeState, activityBus = activityBus, mock = mockAiClient,
-                    registry = modelRegistry, selectedModel = selectedModelState,
+                    real = noModelFallback, registry = modelRegistry, selectedModel = selectedModelState,
                 )
             ),
             activityBus = activityBus,
             commonConfig = commonConfig,
             mainlinePool = if (def.key in configuration.mainlinePool) sharedMainlinePool else null,
             recentTargets = recentMainlineTargets,
+            calloutRotation = calloutRotation,
         )
     }
 
@@ -122,7 +140,10 @@ class Controller(private val configuration: Configuration) {
     private val qualityAnalyzer = ResponseQualityAnalyzer(
         activityLog = activityLog,
         botReferenceForms = definitions.associate { it.key to TriggerMatcher.referenceForms(it.triggerKeywords) },
-        aiClient = SwitchableAIClient(botKey = "quality-analyzer", state = mockModeState, activityBus = activityBus, mock = mockAiClient),
+        aiClient = SwitchableAIClient(
+            botKey = "quality-analyzer", state = mockModeState, activityBus = activityBus, mock = mockAiClient,
+            real = noModelFallback, registry = modelRegistry, selectedModel = selectedModelState,
+        ),
     )
 
     // Read-only over the persisted logs too, same as qualityAnalyzer - only replay() itself
@@ -157,6 +178,27 @@ class Controller(private val configuration: Configuration) {
         // nothing's been saved yet (statePersistence.load() returns null).
         statePersistence.load()?.let { admin.applyPersistedState(it) }
         activityLog.start(backgroundScope, activityBus.events)
+        warmUpLocalModel()
+    }
+
+    /**
+     * Loads the selected local model into memory now, in the background, instead of making the
+     * first chatter pay the ~50s cold load - and, if the model can't be reached at all, says so
+     * (and engages fallback) immediately instead of letting that first viewer discover it. Only
+     * ever runs against a local model: a billed one is never called just to warm it up.
+     */
+    private fun warmUpLocalModel() {
+        val key = selectedModelState.key
+        val client = modelRegistry.clientFor(key) as? OllamaAIClient ?: return
+        if (mockModeState.enabled) return
+        backgroundScope.launch {
+            try {
+                client.generateContent("hi")
+                Messaging.green("Model '$key' is loaded and ready")
+            } catch (e: Exception) {
+                mockModeState.recordFailure(key, e.message ?: e.toString(), immediate = true)
+            }
+        }
     }
 
     fun start() {

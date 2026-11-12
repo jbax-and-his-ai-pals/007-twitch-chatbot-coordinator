@@ -24,3 +24,6 @@ data/
 
 # Restore possible ignores that affected the wrapper folder
 !gradle/wrapper/**
+
+# Python bytecode
+__pycache__/

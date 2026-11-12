@@ -3,8 +3,8 @@ package com.github.twitch4j.chatbot.kotlin.core
 import kotlin.random.Random
 
 /**
- * Production stand-in for the real Gemini-backed [AIClient], used when the GUI's mock
- * mode is on so testing never costs money or hits the network. Derives its default
+ * The app's fallback [AIClient]: used when the GUI's fallback mode is on, or automatically when
+ * the real model can't be reached (see [SwitchableAIClient]). Needs no model and no network. Derives its default
  * response from the prompt itself (rather than a fixed string) so text the prompt requires
  * to survive - the bot's configured transform word, a viewer's username in a hello-back
  * prompt - actually ends up in the response, keeping downstream checks that require it
@@ -72,17 +72,21 @@ class MockAIClient(private val maxLogSize: Int = 200) : AIClient {
     private fun defaultResponse(prompt: String): String {
         val helloUser = helloUserPattern.find(prompt)?.groupValues?.get(1)
         if (!helloUser.isNullOrBlank()) {
-            return "[MOCK] hey there, $helloUser!"
+            return "hey there, $helloUser!"
         }
 
+        // Only a real transform prompt (it always ends with the casing instruction) gets the
+        // word-swap - a request prompt also ends in a quoted string and carries the same
+        // "don't repeat X" preamble, and swapping a word into the viewer's own request would
+        // just echo it back at them.
         val quoted = trailingQuotedPattern.find(prompt)?.groupValues?.get(1)
         val word = transformWordPattern.find(prompt)?.groupValues?.get(1)?.lowercase()
 
-        if (!quoted.isNullOrBlank() && !word.isNullOrBlank()) {
+        if (transformMarker in prompt && !quoted.isNullOrBlank() && !word.isNullOrBlank()) {
             return substituteWord(quoted, word)
         }
 
-        return "[MOCK] " + prompt.takeLast(120).trim()
+        return FALLBACK_LINE
     }
 
     /**
@@ -105,6 +109,15 @@ class MockAIClient(private val maxLogSize: Int = 200) : AIClient {
     }
 
     companion object {
+        /**
+         * What requests, wisdom and anything else without a sensible canned answer get. This
+         * client is the app's fallback when the real model is unavailable (see
+         * [SwitchableAIClient]), so every default here has to be fit to post in a live chat -
+         * no "[MOCK]" tags, no echoed prompt text.
+         */
+        const val FALLBACK_LINE = "sorry, my brain is offline for a minute - try again soon!"
+
+        private const val transformMarker = "preserve the exact capitalization"
         private val transformWordPattern = Regex("don't repeat (\\S+) over and over")
         private val trailingQuotedPattern = Regex("\"([^\"]*)\"\\s*$")
         private val helloUserPattern = Regex("your response must include this user's name: \"([^\"]*)\"")

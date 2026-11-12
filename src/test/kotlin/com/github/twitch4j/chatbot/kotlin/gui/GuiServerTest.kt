@@ -885,4 +885,32 @@ class GuiServerTest {
         }
         assertEquals(HttpStatusCode.NotFound, rejected.status)
     }
+
+    @Test
+    fun `GET api mock exposes an automatic fallback with its reason, and posting enabled=false clears it`() = testApplication {
+        val state = MockModeState(initiallyEnabled = false)
+        val chat: ITwitchChat = mockk(relaxed = true)
+        val client2: ITwitchClient = mockk(relaxed = true)
+        every { client2.chat } returns chat
+        val admin = AdminController(
+            personalities = emptyList(), clients = mapOf("x" to client2), activityBus = ActivityBus(),
+            mockModeState = state, mockAiClient = MockAIClient(), commonConfig = CommonConfig(),
+        )
+        application { guiModule(admin) }
+        state.recordFailure("gemma4-12b", "connection refused", immediate = true)
+
+        val on = json.decodeFromString<MockModeDto>(client.get("/api/mock").bodyAsText())
+        assertFalse(on.enabled)
+        assertTrue(on.automatic)
+        assertTrue(on.reason!!.contains("connection refused"))
+        assertTrue(on.sinceMs != null)
+
+        client.post("/api/mock") {
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(MockModeDto.serializer(), MockModeDto(false)))
+        }
+        val off = json.decodeFromString<MockModeDto>(client.get("/api/mock").bodyAsText())
+        assertFalse(off.automatic)
+        assertEquals(null, off.reason)
+    }
 }

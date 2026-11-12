@@ -1,6 +1,9 @@
 package com.github.twitch4j.chatbot.kotlin.core.engine
 
+import com.github.twitch4j.chatbot.kotlin.core.TransformConfig
+import com.github.twitch4j.chatbot.kotlin.core.TransformWord
 import com.github.twitch4j.chatbot.kotlin.core.testBotDefinition
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -122,5 +125,90 @@ class TransformedMessageTest {
         )
 
         assertTrue(result.transformed == "The Testword are Nice Today")
+    }
+
+    @Test
+    fun `oi sound swap is valid only when sound_swap is on`() {
+        val ai = GenericAI(FakeAIClient(response = "that is the worst boid"))
+        val on = testBotDefinition(similarityThreshold = 0, transform = TransformConfig(words = listOf(TransformWord("TESTWORD")), soundSwap = true))
+        val off = testBotDefinition(similarityThreshold = 0)
+
+        fun run(bot: com.github.twitch4j.chatbot.kotlin.core.BotDefinition) = TransformedMessage.fromString(
+            bot, ai, original = "that is the worst bird", word = "TESTWORD",
+            fromLastActedUser = false, notEnoughMessages = false,
+        )
+
+        assertTrue(run(on).isValid)
+        assertFalse(run(off).isValid)
+    }
+
+    private fun toikey(chance: Double) = testBotDefinition(
+        similarityThreshold = 0,
+        transform = TransformConfig(words = listOf(TransformWord("TESTWORD")), soundSwap = true, soundSwapChance = chance),
+    )
+
+    @Test
+    fun `sound swap by rule makes a valid oi edit without calling the model`() {
+        val client = FakeAIClient(response = "should never be used")
+        val result = TransformedMessage.fromString(
+            toikey(1.0), GenericAI(client), original = "that is a really good burger", word = "TESTWORD",
+            fromLastActedUser = false, notEnoughMessages = false,
+        )
+
+        assertTrue(result.isValid)
+        assertEquals("that is a really good boiger", result.transformed)
+        assertTrue(client.prompts.isEmpty())
+    }
+
+    @Test
+    fun `sound swap falls back to the model when no word qualifies`() {
+        val client = FakeAIClient(response = "nice TESTWORD pic")
+        val result = TransformedMessage.fromString(
+            toikey(1.0), GenericAI(client), original = "nice cat pic", word = "TESTWORD",
+            fromLastActedUser = false, notEnoughMessages = false,
+        )
+
+        assertTrue(result.isValid)
+        assertEquals(1, client.prompts.size)
+    }
+
+    @Test
+    fun `sound swap chance of zero always asks the model`() {
+        val client = FakeAIClient(response = "that is a really good TESTWORD")
+        val result = TransformedMessage.fromString(
+            toikey(0.0), GenericAI(client), original = "that is a really good burger", word = "TESTWORD",
+            fromLastActedUser = false, notEnoughMessages = false,
+        )
+
+        assertTrue(result.isValid)
+        assertEquals(1, client.prompts.size)
+    }
+
+    @Test
+    fun `sound swap never fires on a sincere line`() {
+        val client = FakeAIClient(response = "x")
+        val result = TransformedMessage.fromString(
+            toikey(1.0), GenericAI(client), original = "my mother is in the hospital", word = "TESTWORD",
+            fromLastActedUser = false, notEnoughMessages = false,
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(client.prompts.isEmpty())
+    }
+
+    @Test
+    fun `sincere line is left alone without calling the model`() {
+        val client = FakeAIClient(response = "my mom is in the TESTWORD again")
+        val ai = GenericAI(client)
+        val bot = testBotDefinition(similarityThreshold = 0)
+
+        val result = TransformedMessage.fromString(
+            bot, ai, original = "my mom is in the hospital again", word = "TESTWORD",
+            fromLastActedUser = false, notEnoughMessages = false,
+        )
+
+        assertTrue(result.isSame)
+        assertFalse(result.isValid)
+        assertTrue(client.prompts.isEmpty())
     }
 }

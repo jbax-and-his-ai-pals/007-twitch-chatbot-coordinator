@@ -70,7 +70,7 @@ class BotDefinitionTest {
         val raw = RawBotConfig(accountUsername = "grumblebot", triggerKeywords = listOf("grumblebot"))
         val bot = BotDefinition.resolve("grumblebot", raw, defaults)
 
-        assertEquals(30000L, bot.cooldowns.wisdomMs)
+        assertEquals(defaults.cooldowns.wisdomMs, bot.cooldowns.wisdomMs)
         assertEquals(300000L, bot.cooldowns.mainline.startDelayMs)
     }
 
@@ -93,7 +93,7 @@ class BotDefinitionTest {
 
         assertEquals(5000L, bot.cooldowns.wisdomMs)
         assertEquals(1000L, bot.cooldowns.mainline.startDelayMs)
-        assertEquals(30000L, bot.cooldowns.calloutMs) // untouched field still falls back to defaults
+        assertEquals(defaults.cooldowns.calloutMs, bot.cooldowns.calloutMs) // untouched field still falls back to defaults
     }
 
     @Test

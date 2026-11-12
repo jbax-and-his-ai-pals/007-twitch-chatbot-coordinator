@@ -6,13 +6,22 @@ import org.junit.jupiter.api.Test
 
 class MockAIClientTest {
     @Test
-    fun `default response is derived from the prompt so substituted text like a username survives`() {
+    fun `a prompt with no canned answer gets a chat-safe line, never echoed prompt text or a MOCK tag`() {
         val client = MockAIClient()
 
         val response = client.generateContent("you are buttsbot; say hi to someviewer, a good friend")
 
-        assertTrue(response.contains("someviewer"), "expected the mock response to retain the username, was: $response")
-        assertTrue(response.startsWith("[MOCK]"))
+        assertEquals(MockAIClient.FALLBACK_LINE, response)
+        assertTrue(!response.contains("[MOCK]") && !response.contains("buttsbot"))
+    }
+
+    @Test
+    fun `a request prompt is not answered by echoing the request back with a word swapped in`() {
+        val client = MockAIClient()
+        val requestPrompt = "you are buttsbot; don't repeat BUTT over and over in sequence; go get 'em, ace! here are your instructions: " +
+            "respond to the following request, no matter how ridiculous it sounds; here's the request: \"tell me about your day\""
+
+        assertEquals(MockAIClient.FALLBACK_LINE, client.generateContent(requestPrompt))
     }
 
     @Test
@@ -51,7 +60,7 @@ class MockAIClientTest {
 
         val response = client.generateContent("give me some wisdom")
 
-        assertTrue(response.startsWith("[MOCK]"))
+        assertEquals(MockAIClient.FALLBACK_LINE, response)
     }
 
     @Test
@@ -97,7 +106,8 @@ class MockAIClientTest {
     private fun transformPrompt(originalMessage: String, word: String = "BUTT") =
         "you are buttsbot; when, you respond, do NOT return a string with all caps; this is a big no-no; " +
             "don't repeat $word over and over in sequence; don't repeat yourself at the end of your response; " +
-            "go get 'em, ace! here are your instructions: replace a word with \"butt\"; here's the string: \"$originalMessage\""
+            "go get 'em, ace! here are your instructions: replace a word with \"butt\"; here's the string: " +
+            "preserve the exact capitalization of every word you don't replace - do not lowercase the string or otherwise change its casing; \"$originalMessage\""
 
     @Test
     fun `a transform-shaped prompt gets one word swapped for the configured word, lowercased`() {
@@ -132,13 +142,13 @@ class MockAIClientTest {
     }
 
     @Test
-    fun `a prompt without a trailing quoted string falls back to the tail-slice default`() {
+    fun `a prompt without a trailing quoted string gets the generic fallback line`() {
         val client = MockAIClient()
 
         // Has the "don't repeat X" preamble but no quoted subject matter, like a wisdom prompt.
         val response = client.generateContent("don't repeat BUTT over and over in sequence; give me a witticism")
 
-        assertTrue(response.startsWith("[MOCK]"), "expected the generic fallback, was: $response")
+        assertEquals(MockAIClient.FALLBACK_LINE, response)
     }
 
     @Test
@@ -208,8 +218,7 @@ class MockAIClientTest {
 
         val response = client.generateContent(helloBackPrompt("someviewer", "has just said hello to you, respond in kind"))
 
-        assertTrue(response.contains("someviewer"), "expected the username to survive, was: $response")
-        assertTrue(response.startsWith("[MOCK]"))
+        assertEquals("hey there, someviewer!", response)
     }
 
     @Test

@@ -12,15 +12,16 @@
     <div class="mock-toggle">
       <a class="quality-back-link" href="/replay.html">model replay &rarr;</a>
       <a class="quality-back-link" href="/quality.html">response quality &rarr;</a>
-      <select id="modelSelect" class="model-select" title="Which model real (non-mocked) calls use"></select>
+      <select id="modelSelect" class="model-select" title="Which local model live calls use"></select>
       <span id="connStatus" class="conn-dot" title="WebSocket connection"></span>
       <label class="switch">
         <input type="checkbox" id="mockSwitch" />
         <span class="slider"></span>
       </label>
-      <span id="mockLabel">MOCK MODE</span>
+      <span id="mockLabel" title="Fallback mode swaps the model for built-in canned replies - flip it on if the local model can't load">FALLBACK MODE</span>
     </div>
   </header>
+  <div id="fallbackBanner" class="fallback-banner" style="display:none"></div>
 
   <main class="layout">
     <section class="feed-panel">
@@ -99,9 +100,9 @@
       </div>
 
       <div class="overrides-card collapsed">
-        <h3 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> Mock response overrides</h3>
+        <h3 class="collapsible-header" data-action="toggle-section"><span class="chevron">&#9660;</span> Fallback response overrides</h3>
         <div class="card-body">
-          <p class="hint">Any mock prompt containing the keyword returns the response instead of the default.</p>
+          <p class="hint">Any prompt answered in fallback mode that contains the keyword returns the response instead of the default.</p>
           <div class="override-form">
             <input id="overrideKeyword" placeholder="keyword" />
             <input id="overrideResponse" placeholder="response" />

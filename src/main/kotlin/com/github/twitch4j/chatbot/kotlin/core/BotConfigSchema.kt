@@ -35,10 +35,10 @@ data class MainlineCooldownConfig(
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class CooldownDefaults(
     val mainline: MainlineCooldownConfig = MainlineCooldownConfig(),
-    val wisdomMs: Long = 30000L,
-    val calloutMs: Long = 30000L,
+    val wisdomMs: Long = 1000L,
+    val calloutMs: Long = 1000L,
     val retryMs: Long = 0L,
-    val requestMs: Long = 30000L,
+    val requestMs: Long = 1000L,
 )
 
 /** Per-bot cooldown overrides; any field left null falls back to [CooldownDefaults]. */
@@ -85,6 +85,12 @@ data class TransformConfig(
     var words: List<TransformWord> = listOf(),
     /** Detects the bot quoting its own past output back at itself (e.g. "blampfied"). Live-editable. */
     var selfQuoteMarker: String = "",
+    /** Skip sincere/sad/heavy lines before calling the model (see SincereLineGate). Set false to restore the old behaviour. */
+    var sincereGate: Boolean = true,
+    /** Also accept a one-word ur/er/ir/or -> oi sound swap as a valid transform (toikeybot's mechanic). */
+    var soundSwap: Boolean = false,
+    /** With [soundSwap] on: how often (0.0-1.0) a rule-based oi edit is made without asking the model, when the message has an eligible word. */
+    var soundSwapChance: Double = 0.5,
 )
 
 /** A named response "mood" (generalizes Buttsbot's nice/mean niceness toggle for any bot). */
@@ -160,17 +166,16 @@ data class ModelOption(
 
 /**
  * Every LLM the running app can route a bot's calls to, and which one is live by default -
- * see [ModelRegistry]. Local (Ollama) models are entirely optional: the default config
- * declares just the real Gemini client, so nothing changes for anyone who hasn't set up
- * Ollama.
+ * see [ModelRegistry]. The default is a local, free Ollama model (gemma4:12b); the billed
+ * Vertex/Gemini client is only used if a `provider: "vertex"` entry is explicitly added.
  */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 @JsonIgnoreProperties(ignoreUnknown = true)
 data class ModelsConfig(
     /** Where to reach a locally-running Ollama server - only used by `provider: "ollama"` entries below. */
     val ollamaBaseUrl: String = "http://localhost:11434",
-    val default: String = "gemini",
-    val available: List<ModelOption> = listOf(ModelOption(key = "gemini", provider = "vertex")),
+    val default: String = "gemma4-12b",
+    val available: List<ModelOption> = listOf(ModelOption(key = "gemma4-12b", provider = "ollama", modelName = "gemma4:12b")),
 )
 
 /** One bot's raw config block, as parsed straight from YAML. */

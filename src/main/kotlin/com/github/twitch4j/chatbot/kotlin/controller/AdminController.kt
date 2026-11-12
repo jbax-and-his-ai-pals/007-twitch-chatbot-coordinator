@@ -42,6 +42,9 @@ import io.mockk.mockk
 import kotlinx.coroutines.flow.SharedFlow
 import java.time.LocalDate
 
+/** [automaticReason]/[automaticSinceMs] are non-null while the app has switched to fallback on its own - see [com.github.twitch4j.chatbot.kotlin.core.MockModeState]. */
+data class FallbackStatus(val manual: Boolean, val automaticReason: String?, val automaticSinceMs: Long?)
+
 data class BotStatus(
     val key: String,
     val accountUsername: String,
@@ -212,14 +215,18 @@ class AdminController(
      * [com.github.twitch4j.chatbot.kotlin.core.MainlinePool], MAINLINE is applied only the
      * first time that pool is encountered, since every pool member's [Personality.adminCooldown]
      * for MAINLINE reaches the same shared timer; applying it once per pool member would
-     * over-apply (e.g. double-advance a fast-forward).
+     * over-apply (e.g. double-advance a fast-forward). The shared callout rotation is the
+     * same story for CALLOUT.
      */
     private fun forEachCooldown(action: (Personality, CooldownType) -> Unit) {
         val handledPools = mutableSetOf<Any>()
+        val handledRotations = mutableSetOf<Any>()
         personalities.forEach { personality ->
             CooldownType.entries.forEach { type ->
                 val pool = personality.mainlinePool
-                val alreadyHandled = type == CooldownType.MAINLINE && pool != null && !handledPools.add(pool)
+                val rotation = personality.calloutRotation
+                val alreadyHandled = (type == CooldownType.MAINLINE && pool != null && !handledPools.add(pool)) ||
+                    (type == CooldownType.CALLOUT && rotation != null && !handledRotations.add(rotation))
                 if (!alreadyHandled) action(personality, type)
             }
         }
@@ -268,8 +275,15 @@ class AdminController(
 
     fun isMockMode(): Boolean = mockModeState.enabled
 
+    /** The GUI's fallback switch - turning it off also clears an automatic fallback, so the next call retries the real model. */
     fun setMockMode(enabled: Boolean) {
-        mockModeState.enabled = enabled
+        mockModeState.setManual(enabled)
+    }
+
+    /** Whether replies are currently coming from the canned fallback, and if it was the app that decided so. */
+    fun fallbackStatus(): FallbackStatus {
+        val auto = mockModeState.automatic
+        return FallbackStatus(manual = mockModeState.enabled, automaticReason = auto?.reason, automaticSinceMs = auto?.sinceMs)
     }
 
     fun recentActivity(limit: Int = 200): List<ActivityEvent> = activityBus.recent(limit)

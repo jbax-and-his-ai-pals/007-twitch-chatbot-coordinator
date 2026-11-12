@@ -16,6 +16,7 @@ private class FakePersonality(
     override val name: String,
     private val intent: PersonalityIntent,
     override val mainlinePool: MainlinePool? = null,
+    override val calloutRotation: CalloutRotation? = null,
 ) : Personality {
     override val client: ITwitchClient get() = throw UnsupportedOperationException("not needed")
     override val channel = "test"
@@ -39,7 +40,7 @@ private class FakePersonality(
         mainlineIntervalMinimumMs = 0,
         mainlineIntervalMaximumMs = 0,
         wisdom = readyStatus,
-        callout = readyStatus,
+        callout = calloutRotation?.status() ?: readyStatus,
         retry = readyStatus,
         request = readyStatus,
     )
@@ -228,5 +229,115 @@ class MessageDispatcherTest {
         assertFalse(mainlineLine.contains("[A]"))
         assertFalse(mainlineLine.contains("[B]"))
         assertTrue(mainlineLine.contains("[C]"))
+    }
+
+    // ---- Shared callout rotation -------------------------------------------------------
+
+    /** Callout intent that, like the real one, records the send on the shared rotation. */
+    private fun calloutBot(name: String, rotation: CalloutRotation?, sent: MutableList<String>) =
+        FakePersonality(
+            name,
+            PersonalityIntent.Callout {
+                sent.add(name)
+                rotation?.recordResponse(name)
+            },
+            calloutRotation = rotation,
+        )
+
+    private val firstPick: (List<Personality>) -> Personality? = { it.firstOrNull() }
+
+    @Test
+    fun `two bots matching the same callout - exactly one sends`() {
+        val rotation = CalloutRotation(cooldownMs = 30_000, order = listOf("a", "b"))
+        val sent = mutableListOf<String>()
+        val bots = listOf(calloutBot("a", rotation, sent), calloutBot("b", rotation, sent))
+
+        MessageDispatcher.dispatch(bots, event("turkey time"), firstPick)
+
+        assertEquals(listOf("a"), sent)
+    }
+
+    @Test
+    fun `a second callout inside the window is swallowed, including a bot echoing the first reply`() {
+        val rotation = CalloutRotation(cooldownMs = 30_000, order = listOf("a", "b"))
+        val sent = mutableListOf<String>()
+        val bots = listOf(calloutBot("a", rotation, sent), calloutBot("b", rotation, sent))
+
+        MessageDispatcher.dispatch(bots, event("turkey time"), firstPick)
+        MessageDispatcher.dispatch(bots, event("TURKEY!"), firstPick) // the other bot's own reply, echoed back
+
+        assertEquals(listOf("a"), sent)
+    }
+
+    @Test
+    fun `after the window the turn passes to the next bot, then wraps around`() {
+        val rotation = CalloutRotation(cooldownMs = 30_000, order = listOf("a", "b"))
+        val sent = mutableListOf<String>()
+        val bots = listOf(calloutBot("a", rotation, sent), calloutBot("b", rotation, sent))
+
+        repeat(3) {
+            MessageDispatcher.dispatch(bots, event("turkey time"), firstPick)
+            rotation.admin(CooldownAdminAction.Expire)
+        }
+
+        assertEquals(listOf("a", "b", "a"), sent)
+    }
+
+    @Test
+    fun `a bot that cannot answer this message is skipped without losing its turn`() {
+        val rotation = CalloutRotation(cooldownMs = 30_000, order = listOf("a", "b", "c"))
+        val sent = mutableListOf<String>()
+        val a = calloutBot("a", rotation, sent)
+        val b = calloutBot("b", rotation, sent)
+        val c = calloutBot("c", rotation, sent)
+
+        MessageDispatcher.dispatch(listOf(a, b, c), event("turkey time"), firstPick) // a answers
+        rotation.admin(CooldownAdminAction.Expire)
+        MessageDispatcher.dispatch(listOf(a, c), event("bot-specific word"), firstPick) // b can't answer -> c
+        rotation.admin(CooldownAdminAction.Expire)
+        MessageDispatcher.dispatch(listOf(a, b, c), event("turkey time"), firstPick) // after c -> wraps to a
+
+        assertEquals(listOf("a", "c", "a"), sent)
+    }
+
+    @Test
+    fun `a swallowed callout does not fall through to other triggers or the mainline transform`() {
+        val rotation = CalloutRotation(cooldownMs = 30_000, order = listOf("a"))
+        rotation.recordResponse("a") // window already open
+        val sent = mutableListOf<String>()
+        val callout = calloutBot("a", rotation, sent)
+        var helloFired = false
+        val other = FakePersonality("b", PersonalityIntent.Secondary { helloFired = true })
+        val mainline = FakePersonality("c", PersonalityIntent.Mainline)
+
+        MessageDispatcher.dispatch(listOf(callout, other, mainline), event("turkey time"), firstPick)
+
+        assertTrue(sent.isEmpty())
+        assertFalse(helloFired)
+        assertFalse(mainline.mainlineActed)
+    }
+
+    @Test
+    fun `without a rotation every matching bot stays in contention and pickActor chooses one`() {
+        val sent = mutableListOf<String>()
+        val bots = listOf(calloutBot("a", null, sent), calloutBot("b", null, sent))
+        var seen: List<Personality>? = null
+
+        MessageDispatcher.dispatch(bots, event("turkey time"), pickActor = { seen = it; it.last() })
+
+        assertEquals(bots, seen)
+        assertEquals(listOf("b"), sent)
+    }
+
+    @Test
+    fun `the shared callout timer prints once in the summary, not once per bot`() {
+        val rotation = CalloutRotation(cooldownMs = 30_000, order = listOf("a", "b"))
+        val a = FakePersonality("a", PersonalityIntent.None, calloutRotation = rotation)
+        val b = FakePersonality("b", PersonalityIntent.None, calloutRotation = rotation)
+
+        val logs = published { MessageDispatcher.dispatch(listOf(a, b), event(), pickActor = { null }) }
+
+        val other = logs.single { it.fullText().contains("OTHER:") }.fullText()
+        assertEquals(1, Regex("CALLOUT").findAll(other).count())
     }
 }

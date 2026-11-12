@@ -80,6 +80,7 @@ class ConfiguredPersonalityTest {
     private fun dispatch(p: ConfiguredPersonality, event: ChannelMessageEvent): PersonalityIntent {
         val intent = p.determineIntent(event, ProcessedEvent.fromEvent(event))
         if (intent is PersonalityIntent.Secondary) intent.action()
+        if (intent is PersonalityIntent.Callout) intent.action()
         return intent
     }
 
@@ -381,7 +382,7 @@ class ConfiguredPersonalityTest {
 
             val intent = dispatch(p, eventFrom("turkey")) // 6 chars, below the 20-char minimum
 
-            assertTrue(intent is PersonalityIntent.Secondary)
+            assertTrue(intent is PersonalityIntent.Callout)
             val logs = bus.recent().filterIsInstance<ActivityEvent.Log>()
             assertTrue(
                 logs.none { log -> log.segments.any { it.text.contains("TOO SHORT") } },

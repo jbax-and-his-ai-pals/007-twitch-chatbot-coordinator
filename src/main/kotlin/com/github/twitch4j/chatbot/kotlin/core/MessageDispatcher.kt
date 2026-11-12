@@ -31,9 +31,11 @@ object MessageDispatcher {
         printCooldownSummary(personalities)
 
         val secondaryActions = mutableMapOf<Personality, () -> Unit>()
+        val calloutActions = mutableMapOf<Personality, () -> Unit>()
         val mainlineCandidates = mutableListOf<Personality>()
         personalities.forEach { personality ->
             when (val intent = personality.determineIntent(event, processed)) {
+                is PersonalityIntent.Callout -> calloutActions[personality] = intent.action
                 is PersonalityIntent.Secondary -> secondaryActions[personality] = intent.action
                 is PersonalityIntent.Mainline -> mainlineCandidates.add(personality)
                 is PersonalityIntent.None -> Unit
@@ -44,11 +46,36 @@ object MessageDispatcher {
         // first; the mainline pool is only offered to pickActor when nobody wants to fire
         // a secondary action. Either way, pickActor is always consulted once - even with
         // an empty list - so callers can observe exactly what was in contention.
-        val candidates = if (secondaryActions.isNotEmpty()) secondaryActions.keys.toList() else mainlineCandidates
+        //
+        // Callouts outrank everything else, and are throttled as a group when a shared
+        // CalloutRotation exists - see [calloutCandidates].
+        val candidates = when {
+            calloutActions.isNotEmpty() -> calloutCandidates(calloutActions.keys.toList())
+            secondaryActions.isNotEmpty() -> secondaryActions.keys.toList()
+            else -> mainlineCandidates
+        }
         when (val winner = pickActor(candidates)) {
             null -> Unit
-            else -> secondaryActions[winner]?.invoke() ?: winner.actMainline(event)
+            else -> (calloutActions[winner] ?: secondaryActions[winner])?.invoke() ?: winner.actMainline(event)
         }
+    }
+
+    /**
+     * With a shared [CalloutRotation]: nobody while its window is still open (the callout is
+     * swallowed - including another bot echoing the first one's own "TURKEY!" reply), otherwise
+     * just the bot whose turn it is. Without one (no rotation configured), every bot that
+     * matched stays in contention exactly as before and each applies its own per-bot timer.
+     * Either way the winner's action runs through the normal single [pickActor] call.
+     */
+    private fun calloutCandidates(matched: List<Personality>): List<Personality> {
+        val rotation = matched.firstNotNullOfOrNull { it.calloutRotation } ?: return matched
+        if (rotation.isInCooldown()) {
+            Messaging.info("CALLOUT: shared cooldown (${rotation.status().remainingMs / 1000.0}s), skipped")
+            return emptyList()
+        }
+        val turn = rotation.pick(matched.map { it.name }) ?: return emptyList()
+        Messaging.info("CALLOUT: ${turn.uppercase()}'s turn")
+        return matched.filter { it.name == turn }
     }
 
     /**
@@ -70,20 +97,26 @@ object MessageDispatcher {
             printCooldownFragment(label, group.first().cooldownSnapshot().mainline, leadingSpace = index > 0, terminate = index == mainlineGroups.lastIndex)
         }
 
+        // A shared CalloutRotation is one timer for the whole group - printed once at the end
+        // rather than repeated inside every bot's group, like pooled mainline above.
+        val sharedCallout = personalities.firstNotNullOfOrNull { it.calloutRotation }?.status()
+
         Messaging.info("OTHER: ", addNewLine = false)
         personalities.forEachIndexed { index, personality ->
             val snapshot = personality.cooldownSnapshot()
+            val ownCallout = personality.calloutRotation == null
+            val isLastFragment = index == personalities.lastIndex && sharedCallout == null
             Messaging.cyan("${if (index > 0) "  " else ""}${personality.name.uppercase()} ", addNewLine = false)
             printCooldownFragment("WISDOM", snapshot.wisdom, leadingSpace = false, terminate = false)
             printCooldownFragment("REQUEST", snapshot.request, leadingSpace = true, terminate = false)
-            printCooldownFragment("RETRY", snapshot.retry, leadingSpace = true, terminate = false)
-            printCooldownFragment("CALLOUT", snapshot.callout, leadingSpace = true, terminate = index == personalities.lastIndex)
+            printCooldownFragment("RETRY", snapshot.retry, leadingSpace = true, terminate = !ownCallout && isLastFragment)
+            if (ownCallout) printCooldownFragment("CALLOUT", snapshot.callout, leadingSpace = true, terminate = isLastFragment)
         }
+        if (sharedCallout != null) printCooldownFragment("CALLOUT", sharedCallout, leadingSpace = false, terminate = true, prefix = "  ")
     }
 
     /** One "[LABEL]" (ready, green) or "[LABEL (Xs)]" (still cooling down, yellow) fragment - [terminate] ends the whole logical line, same as [Cooldowns]' own print methods used to. */
-    private fun printCooldownFragment(label: String, status: CooldownStatus, leadingSpace: Boolean, terminate: Boolean) {
-        val prefix = if (leadingSpace) " " else ""
+    private fun printCooldownFragment(label: String, status: CooldownStatus, leadingSpace: Boolean, terminate: Boolean, prefix: String = if (leadingSpace) " " else "") {
         if (status.ready) {
             Messaging.green("$prefix[$label]", addNewLine = terminate)
         } else {

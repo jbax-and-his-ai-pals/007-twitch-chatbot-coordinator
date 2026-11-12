@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Model migration comparison</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1c2030; --dim: #667085; --border: #e3e6ec;
+    --accent: #3b6df0; --good: #1f9d55; --bad: #d64545; --warn: #c98a12; --mark: #fff1a8;
+    --good-bg: #e6f6ec; --bad-bg: #fdeaea; --bar: #dfe6fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #11141b; --panel: #181c25; --text: #e6e9f0; --dim: #8d95a8; --border: #2a3040;
+      --accent: #6c92ff; --good: #4cc882; --bad: #f07171; --warn: #e0ac3a; --mark: #5b4d12;
+      --good-bg: #16301f; --bad-bg: #3a1c1c; --bar: #26314f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 22px 28px 8px; max-width: 1280px; margin: 0 auto; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  h2 { margin: 28px 0 10px; font-size: 16px; }
+  main { max-width: 1280px; margin: 0 auto; padding: 0 28px 60px; }
+  .sub { color: var(--dim); font-size: 13px; }
+  .note { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 6px; padding: 10px 14px; margin: 14px 0; font-size: 13px; }
+  .note b { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); background: var(--bg); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  tr.baseline td { background: var(--bg); }
+  .model { font-weight: 600; }
+  .cell { min-width: 120px; }
+  .pct { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar { height: 5px; border-radius: 3px; background: var(--bar); margin-top: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--accent); }
+  .num { font-variant-numeric: tabular-nums; }
+  .dim { color: var(--dim); font-size: 12px; }
+  .chip { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; margin-right: 4px; white-space: nowrap; }
+  .chip.ok { background: var(--good-bg); color: var(--good); }
+  .chip.no { background: var(--bad-bg); color: var(--bad); }
+  .chip.neutral { background: var(--bar); color: var(--text); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; position: sticky; top: 0; z-index: 5; }
+  select, input[type=search] { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font: inherit; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; margin: 14px 0; padding: 14px 16px; }
+  .card-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; margin-bottom: 8px; }
+  .card-head .bot { font-weight: 700; }
+  .orig { background: var(--bg); border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; }
+  .col { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; }
+  .col.base { border-color: var(--accent); }
+  .col h4 { margin: 0 0 6px; font-size: 13px; display: flex; justify-content: space-between; gap: 6px; }
+  .run { padding: 5px 0; border-top: 1px dashed var(--border); font-size: 13px; overflow-wrap: anywhere; }
+  .run:first-of-type { border-top: none; }
+  .run .meta { display: block; font-size: 11px; color: var(--dim); margin-top: 2px; }
+  mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 0 1px; }
+  .empty { color: var(--dim); padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Model migration comparison</h1>
+  <div class="sub" id="subtitle"></div>
+  <div class="note"><b>How to read this.</b> The baseline is each prompt's <i>logged</i> production response (gemini-2.5-flash-lite) &mdash; no new Gemini or paid calls were made; every new model ran locally via Ollama.
+    "Ships" means the response would have passed production's real transform checks (contains the word, similar enough to the original, no emote-shaped words, no self-quote, etc.) &mdash; checked against
+    <span id="agree"></span>. Hello replies must contain the greeter's name; requests must be 150 characters or fewer; all must not leak the prompt.
+    <b>There is no Gemini latency baseline</b> &mdash; the logs never recorded it &mdash; so latency is compared across local models only.
+    This file contains real chat messages and usernames: keep it local.</div>
+</header>
+<main>
+  <h2>Summary</h2>
+  <div id="summary"></div>
+
+  <h2>Why transforms failed</h2>
+  <div id="reasons"></div>
+
+  <h2>Side by side</h2>
+  <div class="controls">
+    <label>Type <select id="fKind"></select></label>
+    <label>Bot <select id="fBot"></select></label>
+    <label>Baseline <select id="fBase"><option value="">any</option><option value="ok">shipped / passed</option><option value="no">rejected / failed</option></select></label>
+    <label>Show <select id="fModel"></select></label>
+    <input type="search" id="fText" placeholder="search text..." />
+    <span class="dim" id="count"></span>
+  </div>
+  <div id="cards"></div>
+</main>
+<script>
+const DATA = /*DATA*/null;
+const BASE_NAME = "gemini-2.5-flash-lite (logged)";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fmtMs = (ms) => ms == null ? "-" : ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : Math.round(ms) + "ms";
+const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const p90 = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(0.9 * s.length))]; };
+const KINDS = ["transform", "hello", "request"];
+const KIND_LABEL = { transform: "Transform", hello: "Hello", request: "Request" };
+
+const itemsByKind = (k) => DATA.items.filter((i) => i.kind === k);
+const kindsPresent = KINDS.filter((k) => itemsByKind(k).length);
+
+$("subtitle").textContent = `Generated ${DATA.generated} - ${DATA.items.length} sampled prompts (${kindsPresent.map((k) => itemsByKind(k).length + " " + k).join(", ")}) from production logs, ${DATA.models.length} local models.`;
+const ag = DATA.agreement;
+$("agree").textContent = `all ${ag.total} logged transforms: the checker agrees with what actually shipped on ${ag.agree} of ${ag.total}`;
+
+// ---- aggregate per model / kind
+function aggregate(model) {
+  const out = {};
+  for (const k of kindsPresent) {
+    const calls = [];
+    DATA.items.forEach((it, idx) => { if (it.kind === k) (model.rows[idx] || []).forEach((c) => calls.push(c)); });
+    out[k] = { n: calls.length, ok: calls.filter((c) => c.ok).length, calls };
+  }
+  const all = Object.values(out).flatMap((o) => o.calls);
+  out.ms = all.map((c) => c.ms).filter((x) => x != null);
+  out.tps = all.map((c) => c.tps).filter((x) => x != null);
+  return out;
+}
+function aggregateBaseline() {
+  const out = {};
+  for (const k of kindsPresent) {
+    const idxs = DATA.items.map((it, i) => (it.kind === k ? i : -1)).filter((i) => i >= 0);
+    out[k] = { n: idxs.length, ok: idxs.filter((i) => DATA.baseline[i].ok).length, calls: idxs.map((i) => DATA.baseline[i]) };
+  }
+  return out;
+}
+const aggs = DATA.models.map((m) => ({ m, a: aggregate(m) }));
+aggs.sort((x, y) => ((y.a.transform?.ok / (y.a.transform?.n || 1)) || 0) - ((x.a.transform?.ok / (x.a.transform?.n || 1)) || 0));
+const baseAgg = aggregateBaseline();
+
+function passCell(a) {
+  if (!a || !a.n) return `<td class="cell dim">-</td>`;
+  const p = Math.round((100 * a.ok) / a.n);
+  return `<td class="cell"><span class="pct">${p}%</span> <span class="dim">${a.ok}/${a.n}</span><div class="bar"><i style="width:${p}%"></i></div></td>`;
+}
+let html = `<table><thead><tr><th>Model</th>${kindsPresent.map((k) => `<th>${KIND_LABEL[k]} pass</th>`).join("")}<th>Median</th><th>p90</th><th>Tokens/s</th><th>Cold load</th></tr></thead><tbody>`;
+html += `<tr class="baseline"><td class="model">${BASE_NAME}<div class="dim">reference - responses from production logs</div></td>${kindsPresent.map((k) => passCell(baseAgg[k])).join("")}<td class="dim" colspan="4">no latency recorded in logs</td></tr>`;
+for (const { m, a } of aggs) {
+  const load = m.load && !m.load.error ? fmtMs(m.load.wall_ms) : `<span class="dim">${m.load?.error ? "failed" : "-"}</span>`;
+  html += `<tr><td class="model">${esc(m.name)}</td>${kindsPresent.map((k) => passCell(a[k])).join("")}<td class="num">${fmtMs(median(a.ms))}</td><td class="num">${fmtMs(p90(a.ms))}</td><td class="num">${a.tps.length ? Math.round(median(a.tps)) : "-"}</td><td class="num">${load}</td></tr>`;
+}
+$("summary").innerHTML = html + "</tbody></table>";
+
+// ---- transform failure reasons
+(function reasons() {
+  const rows = [["baseline", baseAgg.transform], ...aggs.map(({ m, a }) => [m.name, a.transform])];
+  const counts = rows.map(([name, a]) => {
+    const c = {};
+    (a?.calls || []).forEach((call) => (call.reasons || []).forEach((r) => { const key = r.startsWith("error") ? "error" : r; c[key] = (c[key] || 0) + 1; }));
+    return [name, a, c];
+  });
+  const all = [...new Set(counts.flatMap(([, , c]) => Object.keys(c)))].sort();
+  if (!all.length) { $("reasons").innerHTML = `<div class="dim">No transform failures.</div>`; return; }
+  $("reasons").innerHTML = `<table><thead><tr><th>Model</th>${all.map((r) => `<th>${esc(r)}</th>`).join("")}</tr></thead><tbody>` +
+    counts.map(([name, a, c]) => `<tr class="${name === "baseline" ? "baseline" : ""}"><td class="model">${name === "baseline" ? BASE_NAME : esc(name)}</td>${all.map((r) => `<td class="num">${c[r] ? Math.round((100 * c[r]) / (a.n || 1)) + "%" : '<span class="dim">-</span>'}</td>`).join("")}</tr>`).join("") +
+    `</tbody></table><div class="dim" style="margin-top:6px">Percent of that model's transform responses with each problem (a response can have several).</div>`;
+})();
+
+// ---- explorer
+$("fKind").innerHTML = kindsPresent.map((k) => `<option value="${k}">${KIND_LABEL[k]}</option>`).join("");
+$("fBot").innerHTML = `<option value="">all bots</option>` + [...new Set(DATA.items.map((i) => i.bot))].sort().map((b) => `<option>${esc(b)}</option>`).join("");
+$("fModel").innerHTML = `<option value="">all models</option>` + DATA.models.map((m, i) => `<option value="${i}">${esc(m.name)}</option>`).join("");
+
+function hl(text, word) {
+  const t = esc(text);
+  if (!word) return t;
+  return t.replace(new RegExp(word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `<mark>${m}</mark>`);
+}
+function runHtml(c, word) {
+  const chip = c.ok ? `<span class="chip ok">ok</span>` : `<span class="chip no">${esc((c.reasons || ["failed"]).join(", "))}</span>`;
+  const meta = [c.ms != null ? fmtMs(c.ms) : null, c.sim != null ? "similarity " + c.sim : null].filter(Boolean).join(" - ");
+  return `<div class="run">${chip} ${hl(c.text, word)}${meta ? `<span class="meta">${meta}</span>` : ""}</div>`;
+}
+function render() {
+  const kind = $("fKind").value, bot = $("fBot").value, base = $("fBase").value, only = $("fModel").value, q = $("fText").value.toLowerCase();
+  const cards = [];
+  DATA.items.forEach((it, idx) => {
+    if (it.kind !== kind || (bot && it.bot !== bot)) return;
+    const b = DATA.baseline[idx];
+    if (base === "ok" && !b.ok) return;
+    if (base === "no" && b.ok) return;
+    const modelRuns = DATA.models.map((m) => m.rows[idx] || []);
+    if (q) {
+      const hay = [it.original, it.user, b.text, ...modelRuns.flat().map((c) => c.text)].join(" ").toLowerCase();
+      if (!hay.includes(q)) return;
+    }
+    const word = it.kind === "transform" ? it.word : "";
+    const origLabel = it.kind === "transform" ? "Original chat message" : it.kind === "hello" ? "Greeted by" : "Request";
+    const origText = it.kind === "hello" ? it.user : it.original;
+    const baseChip = b.ok ? `<span class="chip ok">${it.kind === "transform" ? "shipped" : "ok"}</span>` : `<span class="chip no">${it.kind === "transform" ? "rejected: " : ""}${esc((b.reasons || []).join(", "))}</span>`;
+    const cols = [`<div class="col base"><h4>${BASE_NAME}</h4><div class="run">${baseChip} ${hl(b.text, word)}${b.sim != null ? `<span class="meta">similarity ${b.sim}</span>` : ""}</div></div>`];
+    DATA.models.forEach((m, mi) => {
+      if (only && String(mi) !== only) return;
+      const runs = modelRuns[mi];
+      const passed = runs.filter((c) => c.ok).length;
+      cols.push(`<div class="col"><h4><span>${esc(m.name)}</span><span class="dim">${passed}/${runs.length} ok</span></h4>${runs.map((c) => runHtml(c, word)).join("") || '<div class="dim">no runs</div>'}</div>`);
+    });
+    cards.push(`<div class="card"><div class="card-head"><span class="bot">${esc(it.bot)}</span><span class="chip neutral">${it.kind}</span>${it.kind === "transform" ? `<span class="dim">word: ${esc(it.word)}</span>` : ""}<span class="dim">${new Date(it.ts).toLocaleDateString()}</span></div>
+      <div class="orig"><div class="label">${origLabel}</div>${esc(origText)}</div><div class="grid">${cols.join("")}</div></div>`);
+  });
+  $("count").textContent = `${cards.length} prompt${cards.length === 1 ? "" : "s"}`;
+  $("cards").innerHTML = cards.join("") || `<div class="empty">Nothing matches these filters.</div>`;
+}
+["fKind", "fBot", "fBase", "fModel"].forEach((id) => $(id).addEventListener("change", render));
+$("fText").addEventListener("input", render);
+render();
+</script>
+</body>
+</html>

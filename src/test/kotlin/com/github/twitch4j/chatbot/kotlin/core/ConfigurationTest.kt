@@ -16,6 +16,7 @@ import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
@@ -106,6 +107,21 @@ class ConfigurationTest {
         assertTrue(toikey.prompts.transform.isNotBlank()) { "toikeybot has no transform prompt" }
     }
 
+    @Test
+    fun `toikeybot is the only bot with the ur-to-oi sound swap, and its prompt teaches it`() {
+        val config = parseTemplate()
+        val toikey = config.bots.getValue("toikeybot")
+
+        assertTrue(toikey.transform.soundSwap) { "toikeybot must accept ur->oi edits (transform.sound_swap)" }
+        config.bots.filterKeys { it != "toikeybot" }.forEach { (name, bot) ->
+            assertFalse(bot.transform.soundSwap) { "$name should not accept oi sound swaps" }
+        }
+
+        val prompt = toikey.prompts.transform.lowercase()
+        assertTrue("oi" in prompt && "woid" in prompt && "boid" in prompt) { "toikeybot's transform prompt lost its oi examples" }
+        assertTrue("woid" in toikey.prompts.voice.lowercase()) { "toikeybot's voice lost the ur->oi accent rule" }
+    }
+
     /**
      * Regression guard for the bug where toikeybot logged "No action taken" forever: it had
      * transform words but no `prompts.transform`, so `GenericAI.transform` built a prompt that
@@ -190,5 +206,23 @@ class ConfigurationTest {
     fun `recent_mainline_target_limit parses as a non-negative count`() {
         val config = parseTemplate()
         assertTrue(config.recentMainlineTargetLimit >= 0) { "a negative limit would disable RecentMainlineTargets in a confusing way instead of cleanly" }
+    }
+
+    @Test
+    fun `the template defaults to a local ollama model and offers no billed provider`() {
+        val models = parseTemplate().models
+
+        val default = models.available.firstOrNull { it.key == models.default }
+        assertEquals("ollama", default?.provider) { "models.default '${models.default}' must be a local ollama entry" }
+        assertTrue(models.available.none { it.provider.equals("vertex", ignoreCase = true) }) {
+            "the billed vertex provider must stay opt-in (commented out) in the template"
+        }
+    }
+
+    @Test
+    fun `with no models block at all the built-in default is also local and free`() {
+        val models = ModelsConfig()
+        assertEquals("ollama", models.available.single { it.key == models.default }.provider)
+        assertTrue(models.available.none { it.provider.equals("vertex", ignoreCase = true) })
     }
 }

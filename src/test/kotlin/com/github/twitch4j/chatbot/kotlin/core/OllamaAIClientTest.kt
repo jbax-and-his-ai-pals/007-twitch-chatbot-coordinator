@@ -3,9 +3,12 @@ package com.github.twitch4j.chatbot.kotlin.core
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
+import com.sun.net.httpserver.HttpServer
+import java.net.InetSocketAddress
 
-/** Only exercises [OllamaAIClient.parseResponseBody] - no real HTTP call, no real Ollama server required. */
+/** Response parsing plus request shape (against a throwaway local HTTP server) - no real Ollama needed. */
 class OllamaAIClientTest {
     @Test
     fun `parses the response field out of a successful body`() {
@@ -35,5 +38,68 @@ class OllamaAIClientTest {
             OllamaAIClient.parseResponseBody(200, """{"error":"model not loaded"}""", "phi4-mini")
         }
         assertTrue(e.message!!.contains("model not loaded"))
+    }
+
+    // ---- request shape, against a throwaway local HTTP server ------------------------------
+
+    private var server: HttpServer? = null
+
+    @AfterEach
+    fun stopServer() {
+        server?.stop(0)
+    }
+
+    /** Serves [handler] (request body -> status/body) and returns the base URL plus every request body it saw. */
+    private fun fakeOllama(handler: (String) -> Pair<Int, String>): Pair<String, MutableList<String>> {
+        val seen = mutableListOf<String>()
+        val s = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        s.createContext("/api/generate") { ex ->
+            val body = ex.requestBody.readBytes().decodeToString()
+            seen.add(body)
+            val (status, reply) = handler(body)
+            val bytes = reply.toByteArray()
+            ex.sendResponseHeaders(status, bytes.size.toLong())
+            ex.responseBody.use { it.write(bytes) }
+        }
+        s.start()
+        server = s
+        return "http://127.0.0.1:${s.address.port}" to seen
+    }
+
+    @Test
+    fun `requests turn thinking off and keep the model resident`() {
+        val (url, seen) = fakeOllama { 200 to """{"response":"toikey!","done":true}""" }
+
+        val out = OllamaAIClient("gemma4:12b", baseUrl = url).generateContent("hello")
+
+        assertEquals("toikey!", out)
+        val body = seen.single()
+        assertTrue(body.contains(""""think":false"""), body)
+        assertTrue(body.contains(""""keep_alive":"1h""""), body)
+        assertTrue(body.contains(""""model":"gemma4:12b""""), body)
+        assertTrue(body.contains(""""stream":false"""), body)
+    }
+
+    @Test
+    fun `a model that rejects the think flag is retried once without it`() {
+        val (url, seen) = fakeOllama { body ->
+            if (body.contains("\"think\"")) 400 to """{"error":"\"phi4-mini\" does not support thinking"}"""
+            else 200 to """{"response":"ok"}"""
+        }
+
+        val out = OllamaAIClient("phi4-mini", baseUrl = url).generateContent("hello")
+
+        assertEquals("ok", out)
+        assertEquals(2, seen.size)
+        assertTrue(!seen[1].contains("think"), seen[1])
+        assertTrue(seen[1].contains("keep_alive"), seen[1])
+    }
+
+    @Test
+    fun `an unrelated 400 is not retried`() {
+        val (url, seen) = fakeOllama { 400 to """{"error":"bad request"}""" }
+
+        assertThrows(IllegalStateException::class.java) { OllamaAIClient("x", baseUrl = url).generateContent("hello") }
+        assertEquals(1, seen.size)
     }
 }
