@@ -1,10 +1,20 @@
 // Control-panel themes. Loaded in <head> on every page (before first paint, so there's no flash of the
 // wrong theme); the choice lives in localStorage and applies via <html data-theme="...">.
-// Adding a theme = add an entry here, plus a `html[data-theme="<id>"]` block in a stylesheet.
+//
+// Adding a theme: add an entry to THEMES, an optional entry to DECOR (a banner above and/or a footer below
+// the page - the things CSS alone can't add), and a `html[data-theme="<id>"]` block in a stylesheet
+// (theme-geocities.css or theme-retro.css). Everything is homage in the generic sense: no logos, no
+// brand artwork, no external fonts or images - just palettes, borders and text.
 (function () {
   var THEMES = [
     { id: "dark", label: "Dark (default)" },
     { id: "geocities", label: "GeoCities '97" },
+    { id: "dos", label: "DOS text mode" },
+    { id: "win31", label: "Windows 3.1-era desktop" },
+    { id: "apple2", label: "Green phosphor terminal" },
+    { id: "amber", label: "Amber CRT terminal" },
+    { id: "micro8", label: "8-bit home computer (blue)" },
+    { id: "lcd", label: "Handheld LCD (4 shades)" },
   ];
   var KEY = "controlPanelTheme";
 
@@ -24,9 +34,9 @@
     decorate(id);
   }
 
-  // --- GeoCities extras: the things CSS alone can't add (a banner, a hit counter, "badges") ---
-  var DECOR_ID = "geocities-decor";
-  var BANNER_ID = "geocities-banner";
+  // --- decorations: { banner: {cls, html}, footer: {cls, html} } per theme ---
+  var BANNER_ID = "theme-banner";
+  var FOOTER_ID = "theme-footer";
 
   function hitCount() {
     var n = 1337;
@@ -37,34 +47,113 @@
     return String(n).padStart(6, "0");
   }
 
+  var CURSOR = '<span class="rt-cursor">&#9608;</span>';
+
+  var DECOR = {
+    geocities: function () {
+      return {
+        banner: {
+          cls: "gc-banner",
+          html: '<span class="gc-marquee">~*~ Welcome to the BLAMPUTTS Control Panel!!! ~*~ ' +
+            'You are visitor number one million (give or take) ~*~ Please sign my guestbook ~*~ ' +
+            'Remember: no all caps in chat, except when the bot does it ~*~ ' +
+            'Best viewed in Netscape Navigator at 800x600 ~*~</span>',
+        },
+        footer: {
+          cls: "gc-footer",
+          html:
+            '<span class="gc-construction">UNDER CONSTRUCTION</span>' +
+            '<span class="gc-counter-wrap">You are visitor # <span class="gc-counter">' + hitCount() + "</span></span>" +
+            '<span class="gc-badge">Best viewed in Netscape 4.0</span>' +
+            '<span class="gc-badge gc-badge-alt">Made with Notepad</span>' +
+            '<span class="gc-blink">NEW!</span>' +
+            '<span class="gc-email">Webmaster: blampbot@geocities.example</span>',
+        },
+      };
+    },
+    dos: function () {
+      return {
+        banner: {
+          cls: "rt-banner rt-menubar",
+          html: "<span><u>F</u>ile</span><span><u>E</u>dit</span><span><u>V</u>iew</span><span><u>S</u>earch</span>" +
+            "<span><u>R</u>un</span><span><u>H</u>elp</span>",
+        },
+        footer: {
+          cls: "rt-footer",
+          html: "<span>C:&#92;BLAMPUTTS&gt;" + CURSOR + "</span><span class='rt-spacer'></span><span>640K OK</span>",
+        },
+      };
+    },
+    win31: function () {
+      return {
+        banner: {
+          cls: "rt-banner rt-menubar",
+          html: "<span><u>F</u>ile</span><span><u>O</u>ptions</span><span><u>W</u>indow</span><span><u>H</u>elp</span>",
+        },
+      };
+    },
+    apple2: function () {
+      return {
+        banner: {
+          cls: "rt-banner",
+          html: "<span>BLAMPUTTS CONTROL PANEL</span><span class='rt-spacer'></span><span>48K RAM SYSTEM</span>",
+        },
+        footer: { cls: "rt-footer", html: "<span>]RUN BLAMPUTTS" + CURSOR + "</span>" },
+      };
+    },
+    amber: function () {
+      return {
+        banner: {
+          cls: "rt-banner",
+          html: "<span>*** BLAMPUTTS TERMINAL ***</span><span class='rt-spacer'></span><span>LINE: ONLINE &nbsp; 1200 BAUD</span>",
+        },
+        footer: { cls: "rt-footer", html: "<span>LOGIN:" + CURSOR + "</span>" },
+      };
+    },
+    micro8: function () {
+      return {
+        banner: {
+          cls: "rt-banner rt-center",
+          html: "<span>**** BLAMPUTTS BASIC V2 ****</span><span>64K RAM SYSTEM &nbsp; 38911 BASIC BYTES FREE</span>",
+        },
+        footer: { cls: "rt-footer", html: "<span>READY." + CURSOR + "</span>" },
+      };
+    },
+    lcd: function () {
+      return {
+        banner: {
+          cls: "rt-banner",
+          html: "<span>BLAMPUTTS</span><span class='rt-spacer'></span><span>SCORE 000000 &nbsp; HI 037350</span>",
+        },
+        footer: { cls: "rt-footer rt-center", html: "<span class='rt-blink'>PRESS START</span>" },
+      };
+    },
+  };
+
   function decorate(id) {
-    [DECOR_ID, BANNER_ID].forEach(function (x) {
+    [BANNER_ID, FOOTER_ID].forEach(function (x) {
       var el = document.getElementById(x);
       if (el) el.remove();
     });
-    if (id !== "geocities" || !document.body) return;
-
-    var banner = document.createElement("div");
-    banner.id = BANNER_ID;
-    banner.className = "gc-banner";
-    banner.setAttribute("aria-hidden", "true");
-    banner.innerHTML = '<span class="gc-marquee">~*~ Welcome to the BLAMPUTTS Control Panel!!! ~*~ ' +
-      'You are visitor number one million (give or take) ~*~ Please sign my guestbook ~*~ ' +
-      'Remember: no all caps in chat, except when the bot does it ~*~ ' +
-      'Best viewed in Netscape Navigator at 800x600 ~*~</span>';
-    document.body.insertBefore(banner, document.body.firstChild);
-
-    var foot = document.createElement("footer");
-    foot.id = DECOR_ID;
-    foot.className = "gc-footer";
-    foot.innerHTML =
-      '<span class="gc-construction">UNDER CONSTRUCTION</span>' +
-      '<span class="gc-counter-wrap">You are visitor # <span class="gc-counter">' + hitCount() + '</span></span>' +
-      '<span class="gc-badge">Best viewed in Netscape 4.0</span>' +
-      '<span class="gc-badge gc-badge-alt">Made with Notepad</span>' +
-      '<span class="gc-blink">NEW!</span>' +
-      '<span class="gc-email">Webmaster: blampbot@geocities.example</span>';
-    document.body.appendChild(foot);
+    var make = DECOR[id];
+    if (!make || !document.body) return;
+    var d = make();
+    if (d.banner) {
+      var b = document.createElement("div");
+      b.id = BANNER_ID;
+      b.className = d.banner.cls;
+      b.setAttribute("aria-hidden", "true");
+      b.innerHTML = d.banner.html;
+      document.body.insertBefore(b, document.body.firstChild);
+    }
+    if (d.footer) {
+      var f = document.createElement("footer");
+      f.id = FOOTER_ID;
+      f.className = d.footer.cls;
+      f.setAttribute("aria-hidden", "true");
+      f.innerHTML = d.footer.html;
+      document.body.appendChild(f);
+    }
   }
 
   function buildSelect() {

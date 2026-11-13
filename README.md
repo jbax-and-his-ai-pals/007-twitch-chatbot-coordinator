@@ -142,3 +142,7 @@ Two more offline tools work on the logs (output goes to gitignored `data/`, sinc
    wants a secondary action. `Scheduler` picks a single winner.
 4. The winner acts, and every diagnostic from the whole pass lands in the activity feed as
    one entry (identical repeated lines collapsed).
+
+## Credits
+
+The retro control-panel themes use the IBM VGA 8x16 pixel font from The Ultimate Oldschool PC Font Pack by VileR (<https://int10h.org/oldschool-pc-fonts/>), licensed CC BY-SA 4.0 - see `src/main/resources/static/fonts/README.md`.

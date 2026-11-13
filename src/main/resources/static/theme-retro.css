@@ -1,0 +1,265 @@
+/* Retro themes: DOS text mode, a Windows 3.1-era desktop, green-phosphor and amber terminals, an 8-bit
+   home computer, and a handheld LCD. Generic homage only - palettes, borders, text. No logos, no brand
+   artwork, no external fonts (just system monospace stacks). Each theme is a block of variables; the rules
+   below the variables are shared structure. The banner/footer elements come from theme.js. */
+
+/* The real IBM VGA ROM text font that DOS used (pixel-exact, 8x16). Bundled locally - see fonts/README.md for the license (CC BY-SA 4.0). */
+@font-face {
+  font-family: "IBM VGA 8x16";
+  src: url("/fonts/Web437_IBM_VGA_8x16.woff") format("woff");
+  font-display: swap;
+}
+
+/* ---------- palettes ---------- */
+html[data-theme="dos"] {
+  color-scheme: dark;
+  --bg: #000000; --panel: #000000; --panel-alt: #0000aa; --border: #aaaaaa;
+  --text: #aaaaaa; --text-dim: #5555ff; --accent: #55ffff;
+  --green: #55ff55; --yellow: #ffff55; --red: #ff5555; --purple: #ff55ff; --cyan: #55ffff;
+  --rt-bar-bg: #aaaaaa; --rt-bar-fg: #000000; --rt-hot: #ffffff;
+  --rt-font: "IBM VGA 8x16", "Lucida Console", "Courier New", monospace;
+  --rt-border-style: double;
+}
+html[data-theme="win31"] {
+  color-scheme: light;
+  --bg: #c0c0c0; --panel: #c0c0c0; --panel-alt: #dfdfdf; --border: #808080;
+  --text: #000000; --text-dim: #404040; --accent: #000080;
+  --green: #006400; --yellow: #7a5200; --red: #c00000; --purple: #800080; --cyan: #006666;
+  --rt-bar-bg: #ffffff; --rt-bar-fg: #000000; --rt-hot: #000080;
+  --rt-font: "MS Sans Serif", "Microsoft Sans Serif", Arial, Helvetica, sans-serif;
+  --rt-border-style: outset;
+}
+html[data-theme="apple2"] {
+  color-scheme: dark;
+  --bg: #000800; --panel: #000d02; --panel-alt: #00240a; --border: #1fa84a;
+  --text: #33ff66; --text-dim: #1fa84a; --accent: #99ffb3;
+  --green: #33ff66; --yellow: #b6ff7a; --red: #e2ff3d; --purple: #66ffcc; --cyan: #66ffcc;
+  --rt-bar-bg: #33ff66; --rt-bar-fg: #000800; --rt-hot: #99ffb3;
+  --rt-font: "IBM VGA 8x16", "Lucida Console", "Courier New", monospace;
+  --rt-border-style: solid; --rt-glow: 0 0 5px rgba(51, 255, 102, 0.65);
+}
+html[data-theme="amber"] {
+  color-scheme: dark;
+  --bg: #0a0500; --panel: #100800; --panel-alt: #2a1700; --border: #b37a00;
+  --text: #ffb000; --text-dim: #b37a00; --accent: #ffd24d;
+  --green: #ffcc33; --yellow: #ffe08a; --red: #ff6a3d; --purple: #ff9a4d; --cyan: #ffd24d;
+  --rt-bar-bg: #ffb000; --rt-bar-fg: #0a0500; --rt-hot: #ffd24d;
+  --rt-font: "IBM VGA 8x16", "Lucida Console", "Courier New", monospace;
+  --rt-border-style: solid; --rt-glow: 0 0 5px rgba(255, 176, 0, 0.6);
+}
+html[data-theme="micro8"] {
+  color-scheme: dark;
+  --bg: #3c2f8f; --panel: #352879; --panel-alt: #4a3da3; --border: #7869c4;
+  --text: #b7adff; --text-dim: #8c80d8; --accent: #ffffff;
+  --green: #8ad66a; --yellow: #d6e48a; --red: #e08a7e; --purple: #d49ce0; --cyan: #94d9ea;
+  --rt-bar-bg: #7869c4; --rt-bar-fg: #352879; --rt-hot: #ffffff;
+  --rt-font: "IBM VGA 8x16", "Lucida Console", "Courier New", monospace;
+  --rt-border-style: solid;
+}
+html[data-theme="lcd"] {
+  color-scheme: light;
+  --bg: #9bbc0f; --panel: #8bac0f; --panel-alt: #8bac0f; --border: #306230;
+  --text: #0f380f; --text-dim: #306230; --accent: #0f380f;
+  --green: #306230; --yellow: #306230; --red: #0f380f; --purple: #306230; --cyan: #306230;
+  --rt-bar-bg: #306230; --rt-bar-fg: #9bbc0f; --rt-hot: #0f380f;
+  --rt-font: "IBM VGA 8x16", "Lucida Console", "Courier New", monospace;
+  --rt-border-style: solid;
+}
+
+/* ---------- pixel-font crispness: native 16px everywhere, no tracking, no smoothing (Windows theme keeps its sans) ---------- */
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"]) * {
+  font-size: 16px;
+  letter-spacing: 0;
+  line-height: 1.25;
+  font-weight: normal;
+  font-synthesis: none;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/* ---------- shared structure for every retro theme ---------- */
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) {
+  accent-color: var(--accent);
+}
+
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) * {
+  font-family: var(--rt-font);
+  border-radius: 0 !important;
+  scrollbar-color: var(--border) var(--bg);
+}
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"]) body {
+  font-size: 16px;
+  text-shadow: var(--rt-glow, none);
+}
+
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+}
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"]) ::selection { background: var(--text); color: var(--bg); }
+
+/* top bar */
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) .topbar {
+  background: var(--panel);
+  border-bottom: 3px var(--rt-border-style) var(--border);
+}
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) .topbar h1 {
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* panels and cards */
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) .layout { gap: 4px; padding: 4px; background: transparent; }
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) :is(.feed-panel, .bots-panel) {
+  background: var(--panel);
+  border: 3px var(--rt-border-style) var(--border);
+}
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) [class*="-card"] {
+  background: var(--panel);
+  border: 2px var(--rt-border-style) var(--border);
+}
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) :is(h2, h3) {
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* controls: inverted on hover, like a menu selection */
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"]) :is(button, .quality-back-link) {
+  color: var(--text);
+  background: var(--panel-alt);
+  border: 2px solid var(--border);
+  cursor: pointer;
+}
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"]) :is(button, .quality-back-link):hover {
+  background: var(--text);
+  color: var(--bg);
+}
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"]) button:disabled { opacity: 0.5; cursor: default; }
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"])
+  :is(input[type="text"], input[type="number"], input:not([type]), textarea, select) {
+  color: var(--text);
+  background: var(--bg);
+  border: 2px solid var(--border);
+}
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"]) input::placeholder { color: var(--text-dim); }
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"]) a { color: var(--accent); }
+:is(html[data-theme="dos"], html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="micro8"], html[data-theme="lcd"]) .theme-select { color: var(--text); background: var(--bg); border-color: var(--border); }
+
+/* ---------- banner and footer (injected by theme.js) ---------- */
+.rt-banner, .rt-footer { display: none; }
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) :is(.rt-banner, .rt-footer) {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 3px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) .rt-banner {
+  background: var(--rt-bar-bg);
+  color: var(--rt-bar-fg);
+  text-shadow: none;
+}
+:is(html[data-theme="dos"], html[data-theme="win31"], html[data-theme="apple2"], html[data-theme="amber"],
+    html[data-theme="micro8"], html[data-theme="lcd"]) .rt-footer {
+  background: var(--bg);
+  color: var(--text);
+  border-top: 2px var(--rt-border-style) var(--border);
+  margin-top: auto;
+}
+.rt-spacer { flex: 1; }
+.rt-center { justify-content: center; flex-direction: row; flex-wrap: wrap; gap: 6px 24px; text-align: center; }
+.rt-menubar u { text-decoration: underline; color: var(--rt-hot); }
+.rt-cursor { animation: rt-blink 1s steps(1) infinite; margin-left: 2px; }
+.rt-blink { animation: rt-blink 1s steps(1) infinite;  }
+@keyframes rt-blink { 50% { opacity: 0; } }
+
+/* ---------- per-theme character ---------- */
+
+/* DOS: a blue "dialog" feel for the title bar and double-line boxes (the border style above) */
+html[data-theme="dos"] .topbar { background: #0000aa; border-bottom-color: #aaaaaa; }
+html[data-theme="dos"] .topbar h1 { color: #ffff55; }
+html[data-theme="dos"] .rt-menubar span { padding: 0 8px; }
+html[data-theme="dos"] .rt-menubar u { color: #aa0000; }
+
+/* Windows 3.1-era: teal desktop behind gray, bevelled windows with navy title bars */
+html[data-theme="win31"] body { background: #008080; font-size: 13px; }
+html[data-theme="win31"] .topbar { background: #000080; border-bottom: 2px outset #ffffff; }
+html[data-theme="win31"] .topbar h1,
+html[data-theme="win31"] .topbar a,
+html[data-theme="win31"] #mockLabel { color: #ffffff; }
+html[data-theme="win31"] :is(.feed-panel, .bots-panel) { border: 2px outset #ffffff; }
+html[data-theme="win31"] .panel-header { background: #000080; color: #ffffff; padding-left: 8px; }
+html[data-theme="win31"] .panel-header h2 { color: #ffffff; text-transform: none; letter-spacing: 0; }
+html[data-theme="win31"] :is(button, .quality-back-link) {
+  color: #000000;
+  background: #c0c0c0;
+  border: 2px outset #ffffff;
+  cursor: pointer;
+}
+html[data-theme="win31"] button:active { border-style: inset; }
+html[data-theme="win31"] :is(input[type="text"], input[type="number"], input:not([type]), textarea, select) {
+  color: #000000; background: #ffffff; border: 2px inset #808080;
+}
+html[data-theme="win31"] .theme-select { color: #000; background: #fff; }
+html[data-theme="win31"] .rt-banner { border-bottom: 1px solid #808080; }
+html[data-theme="win31"] .rt-menubar span { padding: 0 8px; }
+html[data-theme="win31"] .layout { background: transparent; }
+html[data-theme="win31"] a { color: #0000ff; }
+
+/* CRT terminals: scanlines over everything, glow on text */
+:is(html[data-theme="apple2"], html[data-theme="amber"], html[data-theme="dos"])::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.22) 3px);
+}
+html[data-theme="dos"]::after { opacity: 0.45; }
+:is(html[data-theme="apple2"], html[data-theme="amber"]) .topbar { background: var(--panel); border-bottom-style: solid; }
+:is(html[data-theme="apple2"], html[data-theme="amber"]) .rt-banner { font-weight: 700; }
+
+/* 8-bit home computer: light-blue text on blue with a lighter border, centered banner */
+html[data-theme="micro8"] .topbar { background: #352879; border-bottom: 4px solid #7869c4; }
+html[data-theme="micro8"] .rt-banner { flex-direction: column; gap: 0; padding: 6px 12px; }
+html[data-theme="micro8"] .rt-banner span { display: block; }
+html[data-theme="micro8"] .layout { background: var(--bg); }
+
+/* Handheld LCD: four green shades, a pixel-grid overlay and chunky blocky borders */
+html[data-theme="lcd"] .topbar { background: #8bac0f; border-bottom: 4px solid #0f380f; }
+html[data-theme="lcd"] :is(.feed-panel, .bots-panel) { border: 4px solid #0f380f; box-shadow: 4px 4px 0 #306230; }
+html[data-theme="lcd"] [class*="-card"] { border: 3px solid #306230; }
+html[data-theme="lcd"] :is(button, .quality-back-link) { border: 3px solid #0f380f; background: #9bbc0f; color: #0f380f; box-shadow: 3px 3px 0 #306230; }
+html[data-theme="lcd"] :is(button, .quality-back-link):hover { background: #0f380f; color: #9bbc0f; }
+html[data-theme="lcd"] :is(button, .quality-back-link):active { box-shadow: none; transform: translate(3px, 3px); }
+html[data-theme="lcd"] .rt-footer { font-size: 15px; }
+html[data-theme="lcd"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background:
+    repeating-linear-gradient(to right, rgba(15, 56, 15, 0.07) 0, rgba(15, 56, 15, 0.07) 1px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(to bottom, rgba(15, 56, 15, 0.07) 0, rgba(15, 56, 15, 0.07) 1px, transparent 1px, transparent 3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rt-cursor, .rt-blink { animation: none; }
+}
