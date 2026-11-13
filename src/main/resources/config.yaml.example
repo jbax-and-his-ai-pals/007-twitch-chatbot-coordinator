@@ -369,7 +369,7 @@ bots:
 
         moods:
             - name: "default"
-              hello_prompt: "[user], an old friend from the neighborhood, has just walked in and greeted you; give them a warm, chatty, over-the-top welcome like you haven't seen them in years; just the response, please"
+              hello_prompt: "[user], an old friend from the neighborhood, has just walked in and greeted you; give them a warm, chatty, over-the-top welcome like you haven't seen them in years, but keep it to two or three short sentences, under 250 characters total; just the response, please"
         active_mood: "default"
 
         prompts:

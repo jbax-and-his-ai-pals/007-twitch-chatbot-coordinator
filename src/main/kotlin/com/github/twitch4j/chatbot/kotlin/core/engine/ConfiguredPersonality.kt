@@ -7,6 +7,7 @@ import com.github.twitch4j.chatbot.kotlin.core.ActivityEvent
 import com.github.twitch4j.chatbot.kotlin.core.BotDefinition
 import com.github.twitch4j.chatbot.kotlin.core.BotEligibility
 import com.github.twitch4j.chatbot.kotlin.core.CalloutRotation
+import com.github.twitch4j.chatbot.kotlin.core.ChatLimits
 import com.github.twitch4j.chatbot.kotlin.core.CommonConfig
 import com.github.twitch4j.chatbot.kotlin.core.CooldownAdminAction
 import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
@@ -229,12 +230,14 @@ class ConfiguredPersonality(
             Messaging.error("Not sending an empty reply")
             return
         }
-        client.chat.sendMessage(targetChannel, message)
+        val fitted = ChatLimits.fit(message)
+        if (fitted != message) Messaging.error("REPLY TOO LONG FOR TWITCH (${message.length} chars, limit 500) - trimmed to ${fitted.length}")
+        client.chat.sendMessage(targetChannel, fitted)
         activityBus.publish(
             ActivityEvent.Outgoing(
                 botKey = bot.key,
                 channel = targetChannel,
-                message = message,
+                message = fitted,
                 manual = manual,
                 sourceUser = source?.user?.name,
                 sourceMessage = source?.message,

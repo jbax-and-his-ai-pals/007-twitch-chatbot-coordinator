@@ -19,6 +19,7 @@ import com.github.twitch4j.chatbot.kotlin.core.TransformWord
 import com.github.twitch4j.chatbot.kotlin.core.testBotDefinition
 import com.github.twitch4j.common.events.domain.EventUser
 import io.mockk.every
+import io.mockk.slot
 import io.mockk.mockk
 import io.mockk.verify
 import org.junit.jupiter.api.AfterEach
@@ -104,6 +105,20 @@ class ConfiguredPersonalityTest {
         val intent = dispatch(personality(), eventFrom(message))
         assertTrue(intent is PersonalityIntent.Secondary)
         verify { chat.sendMessage("testchannel", any()) }
+    }
+
+    @Test
+    fun `a reply longer than Twitch's limit is trimmed before it is sent, and the feed shows what was sent`() {
+        fakeAI = FakeAIClient(response = "hey someviewer! look at you, it has been ages and ages. ".repeat(20))
+        val bus = ActivityBus()
+        val sent = slot<String>()
+        every { chat.sendMessage("testchannel", capture(sent)) } returns true
+
+        dispatch(personality(activityBus = bus), eventFrom("hi buttsbot"))
+
+        assertTrue(sent.captured.length <= 480) { "sent ${sent.captured.length} chars" }
+        val outgoing = bus.recent().filterIsInstance<ActivityEvent.Outgoing>().single()
+        assertEquals(sent.captured, outgoing.message)
     }
 
     @Test
