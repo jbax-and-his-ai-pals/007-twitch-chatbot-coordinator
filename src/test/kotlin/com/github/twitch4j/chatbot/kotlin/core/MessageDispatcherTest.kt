@@ -25,6 +25,7 @@ private class FakePersonality(
     var mainlineActed = false
         private set
 
+    override var withheldMainlineReason: String? = null
     override fun determineIntent(event: ChannelMessageEvent, processed: ProcessedEvent) = intent
     override fun actMainline(event: ChannelMessageEvent) {
         mainlineActed = true
@@ -80,6 +81,27 @@ class MessageDispatcherTest {
 
         assertTrue(fired)
         assertFalse(personality.mainlineActed)
+    }
+
+    @Test
+    fun `when nobody acts, withheld reasons are printed once, grouped by reason`() {
+        val a = FakePersonality("a", PersonalityIntent.None).also { it.withheldMainlineReason = "dstark87 was the last chatter acted on" }
+        val b = FakePersonality("b", PersonalityIntent.None).also { it.withheldMainlineReason = "dstark87 was the last chatter acted on" }
+        val c = FakePersonality("c", PersonalityIntent.None)
+
+        val text = published { MessageDispatcher.dispatch(listOf(a, b, c), event(), pickActor = { it.firstOrNull() }) }
+            .joinToString(" | ") { it.fullText() }
+
+        assertTrue(text.contains("NO ACTION: A/B - dstark87 was the last chatter acted on")) { text }
+        assertEquals(1, Regex("NO ACTION").findAll(text).count())
+    }
+
+    @Test
+    fun `nothing is printed about withheld mainline when someone acts or nothing was withheld`() {
+        val quiet = FakePersonality("a", PersonalityIntent.None)
+        val text = published { MessageDispatcher.dispatch(listOf(quiet), event(), pickActor = { it.firstOrNull() }) }
+            .joinToString(" | ") { it.fullText() }
+        assertFalse(text.contains("NO ACTION")) { text }
     }
 
     @Test

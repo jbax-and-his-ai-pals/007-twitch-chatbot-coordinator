@@ -56,8 +56,11 @@ class MainlinePool(
         messagesSinceLastMainline++
     }
 
-    fun canAct(userName: String): Boolean =
-        cooldowns.canActMainline(userName, lastUser, messagesSinceLastMainline, minimumMessagesBetween)
+    fun canAct(userName: String): Boolean = blockReason(userName) == null
+
+    /** See [Cooldowns.mainlineBlockReason]. */
+    fun blockReason(userName: String): String? =
+        cooldowns.mainlineBlockReason(userName, lastUser, messagesSinceLastMainline, minimumMessagesBetween)
 
     /** Call once, from whichever pool member the [Scheduler] picked to actually act. */
     fun recordAct(userName: String) {

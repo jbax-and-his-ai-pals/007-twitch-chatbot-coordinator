@@ -39,6 +39,9 @@ sealed class CooldownAdminAction {
     data class AdvanceBy(val ms: Long) : CooldownAdminAction()
 }
 
+/** Returned by [Cooldowns.mainlineBlockReason] while the mainline timer itself is running; the cooldown summary already shows that. */
+const val MAINLINE_TIMER = "mainline timer running"
+
 /**
  * Tracks the assorted per-bot cooldown timers (mainline transform, wisdom, callout,
  * retry, request). Each bot owns its own instance, fully parameterized by its resolved
@@ -93,11 +96,24 @@ class Cooldowns(
         messagesSinceLastMainline: Int,
         minimumMessagesBetween: Int,
         exemptUser: String = "jerbtrundles",
-    ) = when {
-        inMainlineCooldownPeriod() -> false
-        userName == lastUser && lastUser != exemptUser -> false
-        messagesSinceLastMainline < minimumMessagesBetween -> false
-        else -> true
+    ) = mainlineBlockReason(userName, lastUser, messagesSinceLastMainline, minimumMessagesBetween, exemptUser) == null
+
+    /**
+     * Why the mainline transform can't fire for [userName] right now, or null if it can.
+     * [MAINLINE_TIMER] means the timer itself is still running - already visible in the cooldown
+     * summary, so callers usually don't repeat it. Everything else is a gate the summary does NOT show.
+     */
+    fun mainlineBlockReason(
+        userName: String,
+        lastUser: String,
+        messagesSinceLastMainline: Int,
+        minimumMessagesBetween: Int,
+        exemptUser: String = "jerbtrundles",
+    ): String? = when {
+        inMainlineCooldownPeriod() -> MAINLINE_TIMER
+        userName == lastUser && lastUser != exemptUser -> "$userName was the last chatter acted on"
+        messagesSinceLastMainline < minimumMessagesBetween -> "only $messagesSinceLastMainline of $minimumMessagesBetween messages since the last action"
+        else -> null
     }
 
     fun resetMainlineCooldown() {

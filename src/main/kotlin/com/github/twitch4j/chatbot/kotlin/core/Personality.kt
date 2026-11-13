@@ -38,6 +38,13 @@ interface Personality {
     /** How many other messages must pass before this bot's mainline transform can fire again - shared across the pool when [mainlinePool] is set. */
     var minimumMessagesBetween: Int
 
+    /**
+     * Set by [determineIntent]: why this bot is NOT taking the mainline transform on the message it just saw although
+     * the message itself was eligible (e.g. "dstark87 was one of the last 3 chatters acted on"). Null when nothing is
+     * being withheld, or when the only reason is the mainline timer (the cooldown summary already shows that).
+     */
+    val withheldMainlineReason: String? get() = null
+
     /** Decide what (if anything) this personality wants to do with the message. */
     fun determineIntent(event: ChannelMessageEvent, processed: ProcessedEvent): PersonalityIntent
 

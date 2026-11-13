@@ -210,6 +210,18 @@ class ConfiguredPersonalityTest {
     }
 
     @Test
+    fun `a withheld mainline says why, and clears on the next message`() {
+        val recentTargets = RecentMainlineTargets(size = 3).also { it.record("someviewer") }
+        val p = personality(recentTargets = recentTargets)
+
+        dispatch(p, eventFrom("just a normal chat message, nothing special", userName = "someviewer"))
+        assertTrue(p.withheldMainlineReason!!.contains("someviewer")) { p.withheldMainlineReason.toString() }
+
+        dispatch(p, eventFrom("just a normal chat message, nothing special", userName = "someoneelse"))
+        assertEquals(null, p.withheldMainlineReason)
+    }
+
+    @Test
     fun `a user NOT among the recent mainline targets is still offered the mainline intent`() {
         val recentTargets = RecentMainlineTargets(size = 3).also { it.record("someoneelse") }
         val p = personality(recentTargets = recentTargets)

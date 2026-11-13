@@ -55,9 +55,21 @@ object MessageDispatcher {
             else -> mainlineCandidates
         }
         when (val winner = pickActor(candidates)) {
-            null -> Unit
+            null -> printWithheld(personalities)
             else -> (calloutActions[winner] ?: secondaryActions[winner])?.invoke() ?: winner.actMainline(event)
         }
+    }
+
+    /**
+     * Nobody acted. If that was because some bot's mainline gate said no even though the cooldown timer is ready (same chatter as last time,
+     * not enough messages since the last action, one of the recently acted-on chatters), say so in ONE line - otherwise the feed shows an
+     * all-ready cooldown summary, no error and no reply, with no clue why. Bots with the same reason share one fragment.
+     */
+    private fun printWithheld(personalities: List<Personality>) {
+        val byReason = personalities.mapNotNull { p -> p.withheldMainlineReason?.let { it to p.name.uppercase() } }
+            .groupBy({ it.first }, { it.second })
+        if (byReason.isEmpty()) return
+        Messaging.info("NO ACTION: " + byReason.entries.joinToString("; ") { (reason, bots) -> "${bots.joinToString("/")} - $reason" })
     }
 
     /**

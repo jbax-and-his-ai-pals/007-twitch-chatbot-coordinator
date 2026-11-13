@@ -13,6 +13,7 @@ import com.github.twitch4j.chatbot.kotlin.core.CooldownSnapshot
 import com.github.twitch4j.chatbot.kotlin.core.CooldownType
 import com.github.twitch4j.chatbot.kotlin.core.Cooldowns
 import com.github.twitch4j.chatbot.kotlin.core.FeatureConfig
+import com.github.twitch4j.chatbot.kotlin.core.MAINLINE_TIMER
 import com.github.twitch4j.chatbot.kotlin.core.MainlinePool
 import com.github.twitch4j.chatbot.kotlin.core.Messaging
 import com.github.twitch4j.chatbot.kotlin.core.Personality
@@ -84,7 +85,12 @@ class ConfiguredPersonality(
     private val retryFeature = bot.features.filterIsInstance<FeatureConfig.Retry>().firstOrNull()
     private val easterEggFeatures = bot.features.filterIsInstance<FeatureConfig.EasterEgg>()
 
+    @Volatile
+    override var withheldMainlineReason: String? = null
+        private set
+
     override fun determineIntent(event: ChannelMessageEvent, processed: ProcessedEvent): PersonalityIntent {
+        withheldMainlineReason = null
         // Cooldown status is no longer printed per bot here - MessageDispatcher prints one
         // condensed two-line summary covering every personality at once, before this is
         // called for any of them. See MessageDispatcher.printCooldownSummary.
@@ -135,8 +141,15 @@ class ConfiguredPersonality(
                 PersonalityIntent.Secondary { doWisdom(event) }
             retryPrefix != null && !cooldowns.isRetryInCooldown() ->
                 PersonalityIntent.Secondary { doRetry(event) }
-            canActMainline(event.user.name) -> PersonalityIntent.Mainline
-            else -> PersonalityIntent.None
+            else -> {
+                val reason = mainlineBlockReason(event.user.name)
+                if (reason == null) {
+                    PersonalityIntent.Mainline
+                } else {
+                    if (reason != MAINLINE_TIMER) withheldMainlineReason = reason
+                    PersonalityIntent.None
+                }
+            }
         }
     }
 
@@ -145,10 +158,13 @@ class ConfiguredPersonality(
      * EVERY bot, not just this bot's own timer (or its pool's). Past that, checks the shared
      * pool's timer when [mainlinePool] is set, otherwise this bot's own - see [MainlinePool].
      */
-    private fun canActMainline(userName: String): Boolean =
-        !recentTargets.contains(userName) &&
-            (mainlinePool?.canAct(userName)
-                ?: cooldowns.canActMainline(userName, lastUser, messagesSinceLastMainline, bot.cooldowns.mainline.minimumMessagesBetween))
+    private fun mainlineBlockReason(userName: String): String? {
+        val base = mainlinePool?.blockReason(userName)
+            ?: cooldowns.mainlineBlockReason(userName, lastUser, messagesSinceLastMainline, bot.cooldowns.mainline.minimumMessagesBetween)
+        if (base == MAINLINE_TIMER) return base
+        if (recentTargets.contains(userName)) return "$userName was one of the last ${recentTargets.size} chatters any bot acted on"
+        return base
+    }
 
     override fun actMainline(event: ChannelMessageEvent) {
         val word = pickTransformWord()
